@@ -1,9 +1,9 @@
+use rand::{Rng, RngExt, rng};
 use std::fmt;
-use rand::{rng, Rng, RngExt};
 
 #[derive(Clone)]
-pub struct Board{
-    cells: [u8;81]
+pub struct Board {
+    cells: [u8; 81],
 }
 impl fmt::Display for Board {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -18,19 +18,16 @@ impl fmt::Display for Board {
         Ok(())
     }
 }
-impl Board{
-
-    pub fn empty()-> Self{
-        Self{
-            cells: [0;81]
-        }
+impl Board {
+    pub fn empty() -> Self {
+        Self { cells: [0; 81] }
     }
 
-    pub fn get(&self, row: usize, col: usize)-> u8{
+    pub fn get(&self, row: usize, col: usize) -> u8 {
         self.cells[row * 9 + col]
     }
 
-    pub fn set(&mut self, row: usize, col:usize, value:u8){
+    pub fn set(&mut self, row: usize, col: usize, value: u8) {
         self.cells[row * 9 + col] = value;
     }
 
@@ -46,11 +43,11 @@ impl Board{
         board
     }
 
-    pub fn swap_digits(&mut self, a:u8, b:u8){
-        for cell in &mut self.cells{
-            if *cell==a{
+    pub fn swap_digits(&mut self, a: u8, b: u8) {
+        for cell in &mut self.cells {
+            if *cell == a {
                 *cell = b;
-            } else if *cell==b{
+            } else if *cell == b {
                 *cell = a;
             }
         }
@@ -174,7 +171,7 @@ impl Board{
         self.set(row, col, 0);
     }
 
-    pub fn is_empty(&self, row: usize, col: usize)->bool{
+    pub fn is_empty(&self, row: usize, col: usize) -> bool {
         self.get(row, col) == 0
     }
 
@@ -219,6 +216,4 @@ impl Board{
 
         None
     }
-
 }
-

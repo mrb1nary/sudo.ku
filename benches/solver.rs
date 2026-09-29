@@ -1,16 +1,12 @@
 use std::hint::black_box;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use sudoku_engine::board::Board;
 use sudoku_engine::solver::solve;
 
 mod common;
 
-use common::puzzles::{
-    easy_puzzles,
-    hard_puzzles,
-    medium_puzzles,
-};
+use common::puzzles::{easy_puzzles, hard_puzzles, medium_puzzles};
 
 fn benchmark_puzzles(puzzles: &[Board]) {
     for puzzle in puzzles {
