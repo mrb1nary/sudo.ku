@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="EMPTY_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/crates/sudoku-engine/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/sudoku-engine/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/sudoku-engine/tests" isTestSource="true" />
+      <excludeFolder url="file://$MODULE_DIR$/crates/sudoku-engine/target" />
+      <excludeFolder url="file://$MODULE_DIR$/target" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>

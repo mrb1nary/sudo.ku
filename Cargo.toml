@@ -1,14 +1,7 @@
-[package]
-name = "sudoku-engine"
-version = "0.1.0"
-edition = "2024"
+# sudo-ku/Cargo.toml
 
-[dependencies]
-rand = "0.10.3"
-
-[dev-dependencies]
-criterion = "0.8.2"
-
-[[bench]]
-name = "solver"
-harness = false
+[workspace]
+members = [
+    "crates/sudoku-engine",
+]
+resolver = "3"
