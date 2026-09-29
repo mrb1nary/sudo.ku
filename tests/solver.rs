@@ -1,47 +1,77 @@
 use sudoku_engine::board::Board;
-use sudoku_engine::solver::solve;
+use sudoku_engine::solver::{solve, solve_with_stats};
 
-#[test]
-fn solve_complete_board() {
-    let mut board = Board::base();
+fn board_from_string(puzzle: &str) -> Board {
+    let puzzle: String = puzzle
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
 
-    assert!(solve(&mut board));
+    assert_eq!(puzzle.len(), 81);
+
+    let mut board = Board::empty();
+
+    for (index, byte) in puzzle.bytes().enumerate() {
+        let value = byte - b'0';
+
+        if value != 0 {
+            board.set(index / 9, index % 9, value);
+        }
+    }
+
+    board
+}
+
+fn inspect_stats(name: &str, puzzle: &str) {
+    let mut board = board_from_string(puzzle);
+
+    let stats = solve_with_stats(&mut board);
+
+    println!("\n{name}");
+    println!("{stats:#?}");
 }
 
 #[test]
-fn solve_places_a_value() {
-    let mut board = Board::base();
+fn inspect_solver_stats() {
+    inspect_stats(
+        "easy",
+        "\
+        530070000\
+        600195000\
+        098000060\
+        800060003\
+        400803001\
+        700020006\
+        060000280\
+        000419005\
+        000080079",
+    );
 
-    board.clear(4, 7);
+    inspect_stats(
+        "medium",
+        "\
+        003020600\
+        900305001\
+        001806400\
+        008102900\
+        700000008\
+        006708200\
+        002609500\
+        800203009\
+        005010300",
+    );
 
-    assert!(solve(&mut board));
-
-    assert!(!board.is_empty(4, 7));
-}
-
-#[test]
-fn solve_puzzle() {
-    let mut board = Board::base();
-
-    board.clear(0, 0);
-    board.clear(1, 1);
-    board.clear(2, 2);
-    board.clear(3, 3);
-    board.clear(4, 4);
-    board.clear(5, 5);
-    board.clear(6, 6);
-    board.clear(7, 7);
-    board.clear(8, 8);
-
-    assert!(solve(&mut board));
-
-    assert_eq!(board.get(0, 0), 1);
-    assert_eq!(board.get(1, 1), 5);
-    assert_eq!(board.get(2, 2), 9);
-    assert_eq!(board.get(3, 3), 5);
-    assert_eq!(board.get(4, 4), 9);
-    assert_eq!(board.get(5, 5), 4);
-    assert_eq!(board.get(6, 6), 9);
-    assert_eq!(board.get(7, 7), 4);
-    assert_eq!(board.get(8, 8), 8);
+    inspect_stats(
+        "hard",
+        "\
+        005300000\
+        800000020\
+        070010500\
+        400005300\
+        010070006\
+        003200080\
+        060500009\
+        004000030\
+        000009700",
+    );
 }
