@@ -1,31 +1,32 @@
 use crate::board::Board;
 
 pub fn solve(board: &mut Board) -> bool {
-    let empty = find_best_empty(board);
-
-    if empty.is_none() {
+    let Some(((row, col), mut mask)) = find_best_empty(board) else {
         return true;
-    }
+    };
 
-    let (row, col) = empty.unwrap();
+    while mask != 0 {
+        let bit = mask.trailing_zeros();
+        let value = bit + 1;
 
-    for value in 1..=9 {
-        if board.can_place(row, col, value) {
-            board.set(row, col, value);
+        // Remove the lowest set bit.
+        mask &= mask - 1;
 
-            if solve(board) {
-                return true;
-            }
+        board.set(row, col, value as u8);
 
-            board.clear(row, col);
+        if solve(board) {
+            return true;
         }
+
+        board.clear(row, col);
     }
 
     false
 }
 
-fn find_best_empty(board: &Board) -> Option<(usize, usize)> {
+fn find_best_empty(board: &Board) -> Option<((usize, usize), u16)> {
     let mut best_cell = None;
+    let mut best_mask = 0;
     let mut fewest_candidates = 10;
 
     for row in 0..9 {
@@ -34,24 +35,32 @@ fn find_best_empty(board: &Board) -> Option<(usize, usize)> {
                 continue;
             }
 
-            let mut candidates = 0;
+            let mask = candidate_mask(board, row, col);
+            let count = mask.count_ones();
 
-            for value in 1..=9 {
-                if board.can_place(row, col, value) {
-                    candidates += 1;
-                }
-            }
-
-            if candidates < fewest_candidates {
-                fewest_candidates = candidates;
+            if count < fewest_candidates {
+                fewest_candidates = count;
                 best_cell = Some((row, col));
+                best_mask = mask;
 
-                if candidates == 1 {
-                    return best_cell;
+                if count == 1 {
+                    return best_cell.map(|cell| (cell, best_mask));
                 }
             }
         }
     }
 
-    best_cell
+    best_cell.map(|cell| (cell, best_mask))
+}
+
+fn candidate_mask(board: &Board, row: usize, col: usize) -> u16 {
+    let mut mask = 0;
+
+    for value in 1..=9 {
+        if board.can_place(row, col, value) {
+            mask |= 1 << (value - 1);
+        }
+    }
+
+    mask
 }
