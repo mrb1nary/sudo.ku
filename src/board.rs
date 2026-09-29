@@ -1,6 +1,7 @@
 use std::fmt;
 use rand::{rng, Rng, RngExt};
 
+#[derive(Clone)]
 pub struct Board{
     cells: [u8;81]
 }
