@@ -2,6 +2,8 @@ use crate::board::Board;
 
 const ALL_DIGITS: u16 = 0b1_1111_1111;
 
+type CandidateCache = [[u16; 9]; 9];
+
 #[derive(Debug, Default)]
 pub struct SolverStats {
     pub recursive_calls: usize,
@@ -24,8 +26,6 @@ impl Default for SolverConfig {
     }
 }
 
-type CandidateCache = [[u16; 9]; 9];
-
 #[derive(Clone)]
 struct SolverState {
     row_masks: [u16; 9],
@@ -34,7 +34,7 @@ struct SolverState {
 }
 
 impl SolverState {
-    fn new(board: &Board) -> Self {
+    fn from_board(board: &Board) -> Option<Self> {
         let mut state = Self {
             row_masks: [0; 9],
             col_masks: [0; 9],
@@ -45,15 +45,33 @@ impl SolverState {
             for col in 0..9 {
                 let value = board.get(row, col);
 
-                if value != 0 {
-                    state.place(row, col, value);
+                if value == 0 {
+                    continue;
                 }
+
+                if !(1..=9).contains(&value) {
+                    return None;
+                }
+
+                let bit = digit_bit(value);
+                let box_index = box_index(row, col);
+
+                // A duplicate in any unit makes the starting puzzle invalid.
+                if state.row_masks[row] & bit != 0
+                    || state.col_masks[col] & bit != 0
+                    || state.box_masks[box_index] & bit != 0
+                {
+                    return None;
+                }
+
+                state.place(row, col, value);
             }
         }
 
-        state
+        Some(state)
     }
 
+    #[inline]
     fn place(&mut self, row: usize, col: usize, value: u8) {
         let bit = digit_bit(value);
         let box_index = box_index(row, col);
@@ -63,15 +81,7 @@ impl SolverState {
         self.box_masks[box_index] |= bit;
     }
 
-    fn remove(&mut self, row: usize, col: usize, value: u8) {
-        let bit = digit_bit(value);
-        let box_index = box_index(row, col);
-
-        self.row_masks[row] &= !bit;
-        self.col_masks[col] &= !bit;
-        self.box_masks[box_index] &= !bit;
-    }
-
+    #[inline]
     fn candidate_mask(&self, row: usize, col: usize) -> u16 {
         let used = self.row_masks[row]
             | self.col_masks[col]
@@ -81,14 +91,104 @@ impl SolverState {
     }
 }
 
+enum Undo {
+    BoardCell {
+        row: usize,
+        col: usize,
+    },
+    RowMask {
+        row: usize,
+        previous: u16,
+    },
+    ColMask {
+        col: usize,
+        previous: u16,
+    },
+    BoxMask {
+        index: usize,
+        previous: u16,
+    },
+    Candidate {
+        row: usize,
+        col: usize,
+        previous: u16,
+    },
+}
+
+struct Trail {
+    entries: Vec<Undo>,
+}
+
+impl Trail {
+    fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+
+    #[inline]
+    fn checkpoint(&self) -> usize {
+        self.entries.len()
+    }
+
+    #[inline]
+    fn push(&mut self, undo: Undo) {
+        self.entries.push(undo);
+    }
+
+    fn undo_to(
+        &mut self,
+        checkpoint: usize,
+        board: &mut Board,
+        state: &mut SolverState,
+        candidates: &mut CandidateCache,
+    ) {
+        while self.entries.len() > checkpoint {
+            match self.entries.pop().unwrap() {
+                Undo::BoardCell { row, col } => {
+                    board.clear(row, col);
+                }
+                Undo::RowMask { row, previous } => {
+                    state.row_masks[row] = previous;
+                }
+                Undo::ColMask { col, previous } => {
+                    state.col_masks[col] = previous;
+                }
+                Undo::BoxMask { index, previous } => {
+                    state.box_masks[index] = previous;
+                }
+                Undo::Candidate {
+                    row,
+                    col,
+                    previous,
+                } => {
+                    candidates[row][col] = previous;
+                }
+            }
+        }
+    }
+}
+
 pub fn solve(board: &mut Board) -> bool {
     solve_with_config(board, SolverConfig::default())
 }
 
 pub fn solve_with_config(board: &mut Board, config: SolverConfig) -> bool {
-    let mut state = SolverState::new(board);
+    let Some(mut state) = SolverState::from_board(board) else {
+        return false;
+    };
 
-    solve_recursive(board, &mut state, config, None)
+    let mut candidates = build_candidate_cache(board, &state);
+    let mut trail = Trail::new();
+
+    solve_recursive(
+        board,
+        &mut state,
+        &mut candidates,
+        &mut trail,
+        config,
+        None,
+    )
 }
 
 pub fn solve_with_stats(board: &mut Board) -> SolverStats {
@@ -99,12 +199,20 @@ pub fn solve_with_stats_config(
     board: &mut Board,
     config: SolverConfig,
 ) -> SolverStats {
-    let mut state = SolverState::new(board);
     let mut stats = SolverStats::default();
+
+    let Some(mut state) = SolverState::from_board(board) else {
+        return stats;
+    };
+
+    let mut candidates = build_candidate_cache(board, &state);
+    let mut trail = Trail::new();
 
     solve_recursive(
         board,
         &mut state,
+        &mut candidates,
+        &mut trail,
         config,
         Some(&mut stats),
     );
@@ -115,22 +223,27 @@ pub fn solve_with_stats_config(
 fn solve_recursive(
     board: &mut Board,
     state: &mut SolverState,
+    candidates: &mut CandidateCache,
+    trail: &mut Trail,
     config: SolverConfig,
     mut stats: Option<&mut SolverStats>,
 ) -> bool {
     record_recursive_call(&mut stats);
 
-    let mut candidates = build_candidate_cache(board, state);
+    let checkpoint = trail.checkpoint();
 
     // Constraint propagation.
     loop {
-        if let Some((row, col, value)) =
-            find_naked_single(board, &candidates)
-        {
+        if board_is_complete(board) {
+            return true;
+        }
+
+        if let Some((row, col, value)) = find_naked_single(board, candidates) {
             place_value(
                 board,
                 state,
-                &mut candidates,
+                candidates,
+                trail,
                 row,
                 col,
                 value,
@@ -142,12 +255,13 @@ fn solve_recursive(
 
         if config.use_hidden_singles {
             if let Some((row, col, value)) =
-                find_hidden_single(board, &candidates)
+                find_hidden_single(board, candidates)
             {
                 place_value(
                     board,
                     state,
-                    &mut candidates,
+                    candidates,
+                    trail,
                     row,
                     col,
                     value,
@@ -162,51 +276,51 @@ fn solve_recursive(
         break;
     }
 
-    // No empty cells means the puzzle is solved.
-    let Some(((row, col), candidate_mask)) =
-        find_best_empty(board, &candidates)
+    let Some(((row, col), mut remaining)) =
+        find_best_empty(board, candidates)
     else {
-        return board_is_complete(board);
+        // No empty cells remain, so the board is complete.
+        return true;
     };
 
-    // No candidates means this branch is impossible.
-    if candidate_mask == 0 {
+    // An empty candidate set is a contradiction.
+    if remaining == 0 {
+        trail.undo_to(checkpoint, board, state, candidates);
         return false;
     }
 
-    // Try each candidate.
-    let mut remaining = candidate_mask;
+    record_branch(&mut stats);
 
     while remaining != 0 {
         let value = next_value(&mut remaining);
+        let branch_checkpoint = trail.checkpoint();
 
-        record_branch(&mut stats);
-
-        // Snapshot the complete search state before branching.
-        let previous_board = board.clone();
-        let previous_state = state.clone();
-        let previous_candidates = candidates;
-
-        board.set(row, col, value);
-        state.place(row, col, value);
+        place_value(
+            board,
+            state,
+            candidates,
+            trail,
+            row,
+            col,
+            value,
+        );
 
         if solve_recursive(
             board,
             state,
+            candidates,
+            trail,
             config,
             stats.as_deref_mut(),
         ) {
             return true;
         }
 
-        // Restore the complete state after a failed branch.
-        *board = previous_board;
-        *state = previous_state;
-        candidates = previous_candidates;
-
+        trail.undo_to(branch_checkpoint, board, state, candidates);
         record_backtrack(&mut stats);
     }
 
+    trail.undo_to(checkpoint, board, state, candidates);
     false
 }
 
@@ -231,8 +345,7 @@ fn build_candidate_cache(
     for row in 0..9 {
         for col in 0..9 {
             if board.is_empty(row, col) {
-                candidates[row][col] =
-                    state.candidate_mask(row, col);
+                candidates[row][col] = state.candidate_mask(row, col);
             }
         }
     }
@@ -244,44 +357,151 @@ fn place_value(
     board: &mut Board,
     state: &mut SolverState,
     candidates: &mut CandidateCache,
+    trail: &mut Trail,
     row: usize,
     col: usize,
     value: u8,
 ) {
+    trail.push(Undo::BoardCell { row, col });
     board.set(row, col, value);
-    state.place(row, col, value);
 
     let bit = digit_bit(value);
+    let box_index = box_index(row, col);
 
-    // Remove the value from the row.
+    trail.push(Undo::RowMask {
+        row,
+        previous: state.row_masks[row],
+    });
+
+    trail.push(Undo::ColMask {
+        col,
+        previous: state.col_masks[col],
+    });
+
+    trail.push(Undo::BoxMask {
+        index: box_index,
+        previous: state.box_masks[box_index],
+    });
+
+    state.place(row, col, value);
+
+    // The placed cell is no longer empty.
+    let previous = candidates[row][col];
+
+    if previous != 0 {
+        trail.push(Undo::Candidate {
+            row,
+            col,
+            previous,
+        });
+    }
+
+    candidates[row][col] = 0;
+
+    // Remove the value from all peers.
+    remove_candidate_from_row(candidates, board, trail, row, col, bit);
+    remove_candidate_from_column(candidates, board, trail, row, col, bit);
+    remove_candidate_from_box(candidates, board, trail, row, col, bit);
+}
+
+fn remove_candidate_from_row(
+    candidates: &mut CandidateCache,
+    board: &Board,
+    trail: &mut Trail,
+    row: usize,
+    col: usize,
+    bit: u16,
+) {
     for peer_col in 0..9 {
-        if peer_col != col && board.is_empty(row, peer_col) {
-            candidates[row][peer_col] &= !bit;
+        if peer_col == col || !board.is_empty(row, peer_col) {
+            continue;
         }
-    }
 
-    // Remove the value from the column.
+        remove_candidate(
+            candidates,
+            trail,
+            row,
+            peer_col,
+            bit,
+        );
+    }
+}
+
+fn remove_candidate_from_column(
+    candidates: &mut CandidateCache,
+    board: &Board,
+    trail: &mut Trail,
+    row: usize,
+    col: usize,
+    bit: u16,
+) {
     for peer_row in 0..9 {
-        if peer_row != row && board.is_empty(peer_row, col) {
-            candidates[peer_row][col] &= !bit;
+        if peer_row == row || !board.is_empty(peer_row, col) {
+            continue;
         }
-    }
 
-    // Remove the value from the box.
+        remove_candidate(
+            candidates,
+            trail,
+            peer_row,
+            col,
+            bit,
+        );
+    }
+}
+
+fn remove_candidate_from_box(
+    candidates: &mut CandidateCache,
+    board: &Board,
+    trail: &mut Trail,
+    row: usize,
+    col: usize,
+    bit: u16,
+) {
     let start_row = (row / 3) * 3;
     let start_col = (col / 3) * 3;
 
     for peer_row in start_row..start_row + 3 {
         for peer_col in start_col..start_col + 3 {
-            if (peer_row != row || peer_col != col)
-                && board.is_empty(peer_row, peer_col)
+            if (peer_row == row && peer_col == col)
+                || !board.is_empty(peer_row, peer_col)
             {
-                candidates[peer_row][peer_col] &= !bit;
+                continue;
             }
+
+            remove_candidate(
+                candidates,
+                trail,
+                peer_row,
+                peer_col,
+                bit,
+            );
         }
     }
+}
 
-    candidates[row][col] = 0;
+#[inline]
+fn remove_candidate(
+    candidates: &mut CandidateCache,
+    trail: &mut Trail,
+    row: usize,
+    col: usize,
+    bit: u16,
+) {
+    let previous = candidates[row][col];
+    let next = previous & !bit;
+
+    if previous == next {
+        return;
+    }
+
+    trail.push(Undo::Candidate {
+        row,
+        col,
+        previous,
+    });
+
+    candidates[row][col] = next;
 }
 
 fn find_naked_single(
@@ -297,11 +517,7 @@ fn find_naked_single(
             let mask = candidates[row][col];
 
             if mask.count_ones() == 1 {
-                return Some((
-                    row,
-                    col,
-                    mask_to_value(mask),
-                ));
+                return Some((row, col, mask_to_value(mask)));
             }
         }
     }
@@ -410,17 +626,9 @@ fn find_hidden_single_in_box(
         }
     }
 
-    for digit in 0..9 {
-        if let Some(location) = locations[digit] {
-            return Some((
-                location / 9,
-                location % 9,
-                digit as u8 + 1,
-            ));
-        }
-    }
-
-    None
+    find_location(locations, |location| {
+        (location / 9, location % 9)
+    })
 }
 
 fn record_candidate_locations(
@@ -448,11 +656,7 @@ fn find_location(
         if let Some(location) = locations[digit] {
             let (row, col) = make_location(location);
 
-            return Some((
-                row,
-                col,
-                digit as u8 + 1,
-            ));
+            return Some((row, col, digit as u8 + 1));
         }
     }
 
@@ -495,50 +699,57 @@ fn find_best_empty(
     best_cell.map(|cell| (cell, best_mask))
 }
 
+#[inline]
 fn next_value(mask: &mut u16) -> u8 {
     let bit = mask.trailing_zeros();
-
     *mask &= *mask - 1;
-
     bit as u8 + 1
 }
 
+#[inline]
 fn mask_to_value(mask: u16) -> u8 {
     mask.trailing_zeros() as u8 + 1
 }
 
+#[inline]
 fn digit_bit(value: u8) -> u16 {
     1 << (value - 1)
 }
 
+#[inline]
 fn box_index(row: usize, col: usize) -> usize {
     (row / 3) * 3 + (col / 3)
 }
 
+#[inline]
 fn record_recursive_call(stats: &mut Option<&mut SolverStats>) {
     if let Some(stats) = stats.as_deref_mut() {
         stats.recursive_calls += 1;
     }
 }
 
+#[inline]
 fn record_forced_move(stats: &mut Option<&mut SolverStats>) {
     if let Some(stats) = stats.as_deref_mut() {
         stats.forced_moves += 1;
     }
 }
 
+#[inline]
 fn record_hidden_single(stats: &mut Option<&mut SolverStats>) {
     if let Some(stats) = stats.as_deref_mut() {
         stats.hidden_singles += 1;
     }
 }
 
+#[inline]
 fn record_branch(stats: &mut Option<&mut SolverStats>) {
     if let Some(stats) = stats.as_deref_mut() {
         stats.branches += 1;
     }
 }
 
+#[inline]
 fn record_backtrack(stats: &mut Option<&mut SolverStats>) {
     if let Some(stats) = stats.as_deref_mut() {
         stats.backtracks += 1;
