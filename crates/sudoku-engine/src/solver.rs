@@ -27,14 +27,14 @@ impl Default for SolverConfig {
 }
 
 #[derive(Clone)]
-struct SolverState {
+pub struct SolverState {
     row_masks: [u16; 9],
     col_masks: [u16; 9],
     box_masks: [u16; 9],
 }
 
 impl SolverState {
-    fn from_board(board: &Board) -> Option<Self> {
+    pub fn from_board(board: &Board) -> Option<Self> {
         let mut state = Self {
             row_masks: [0; 9],
             col_masks: [0; 9],
@@ -83,9 +83,10 @@ impl SolverState {
 
     #[inline]
     fn candidate_mask(&self, row: usize, col: usize) -> u16 {
-        let used = self.row_masks[row]
-            | self.col_masks[col]
-            | self.box_masks[box_index(row, col)];
+        let used =
+            self.row_masks[row]
+                | self.col_masks[col]
+                | self.box_masks[box_index(row, col)];
 
         ALL_DIGITS & !used
     }
@@ -173,6 +174,104 @@ pub fn solve(board: &mut Board) -> bool {
     solve_with_config(board, SolverConfig::default())
 }
 
+fn count_recursive(
+    board: &mut Board,
+    state: &mut SolverState,
+    candidates: &mut CandidateCache,
+    trail: &mut Trail,
+    config: SolverConfig,
+    limit: usize,
+) -> usize {
+    let checkpoint = trail.checkpoint();
+
+    // Constraint propagation.
+    loop {
+        if board_is_complete(board) {
+            trail.undo_to(checkpoint, board, state, candidates);
+            return 1;
+        }
+
+        if let Some((row, col, value)) = find_naked_single(board, candidates) {
+            place_value(
+                board,
+                state,
+                candidates,
+                trail,
+                row,
+                col,
+                value,
+            );
+
+            continue;
+        }
+
+        if config.use_hidden_singles {
+            if let Some((row, col, value)) =
+                find_hidden_single(board, candidates)
+            {
+                place_value(
+                    board,
+                    state,
+                    candidates,
+                    trail,
+                    row,
+                    col,
+                    value,
+                );
+
+                continue;
+            }
+        }
+
+        break;
+    }
+
+    let Some(((row, col), mut remaining)) =
+        find_best_empty(board, candidates)
+    else {
+        trail.undo_to(checkpoint, board, state, candidates);
+        return 1;
+    };
+
+    // Contradiction.
+    if remaining == 0 {
+        trail.undo_to(checkpoint, board, state, candidates);
+        return 0;
+    }
+
+    let mut solutions = 0;
+
+    while remaining != 0 && solutions < limit {
+        let value = next_value(&mut remaining);
+        let branch_checkpoint = trail.checkpoint();
+
+        place_value(
+            board,
+            state,
+            candidates,
+            trail,
+            row,
+            col,
+            value,
+        );
+
+        solutions += count_recursive(
+            board,
+            state,
+            candidates,
+            trail,
+            config,
+            limit - solutions,
+        );
+
+        trail.undo_to(branch_checkpoint, board, state, candidates);
+    }
+
+    trail.undo_to(checkpoint, board, state, candidates);
+
+    solutions
+}
+
 pub fn solve_with_config(board: &mut Board, config: SolverConfig) -> bool {
     let Some(mut state) = SolverState::from_board(board) else {
         return false;
@@ -188,6 +287,36 @@ pub fn solve_with_config(board: &mut Board, config: SolverConfig) -> bool {
         &mut trail,
         config,
         None,
+    )
+}
+
+pub fn count_solutions(board: &mut Board, limit: usize) -> usize {
+    count_solutions_with_config(board, limit, SolverConfig::default())
+}
+
+pub fn count_solutions_with_config(
+    board: &mut Board,
+    limit: usize,
+    config: SolverConfig,
+) -> usize {
+    if limit == 0 {
+        return 0;
+    }
+
+    let Some(mut state) = SolverState::from_board(board) else {
+        return 0;
+    };
+
+    let mut candidates = build_candidate_cache(board, &state);
+    let mut trail = Trail::new();
+
+    count_recursive(
+        board,
+        &mut state,
+        &mut candidates,
+        &mut trail,
+        config,
+        limit,
     )
 }
 
@@ -218,6 +347,30 @@ pub fn solve_with_stats_config(
     );
 
     stats
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SolverProfile {
+    pub clues: usize,
+    pub recursive_calls: usize,
+    pub forced_moves: usize,
+    pub hidden_singles: usize,
+    pub branches: usize,
+    pub backtracks: usize,
+}
+
+fn count_clues(board: &Board) -> usize {
+    let mut clues = 0;
+
+    for row in 0..9 {
+        for col in 0..9 {
+            if board.get(row, col) != 0 {
+                clues += 1;
+            }
+        }
+    }
+
+    clues
 }
 
 fn solve_recursive(
@@ -324,6 +477,28 @@ fn solve_recursive(
     false
 }
 
+pub fn profile(board: &mut Board) -> SolverProfile {
+    profile_with_config(board, SolverConfig::default())
+}
+
+pub fn profile_with_config(
+    board: &mut Board,
+    config: SolverConfig,
+) -> SolverProfile {
+    let clues = count_clues(board);
+
+    let stats = solve_with_stats_config(board, config);
+
+    SolverProfile {
+        clues,
+        recursive_calls: stats.recursive_calls,
+        forced_moves: stats.forced_moves,
+        hidden_singles: stats.hidden_singles,
+        branches: stats.branches,
+        backtracks: stats.backtracks,
+    }
+}
+
 fn board_is_complete(board: &Board) -> bool {
     for row in 0..9 {
         for col in 0..9 {
@@ -399,9 +574,32 @@ fn place_value(
     candidates[row][col] = 0;
 
     // Remove the value from all peers.
-    remove_candidate_from_row(candidates, board, trail, row, col, bit);
-    remove_candidate_from_column(candidates, board, trail, row, col, bit);
-    remove_candidate_from_box(candidates, board, trail, row, col, bit);
+    remove_candidate_from_row(
+        candidates,
+        board,
+        trail,
+        row,
+        col,
+        bit,
+    );
+
+    remove_candidate_from_column(
+        candidates,
+        board,
+        trail,
+        row,
+        col,
+        bit,
+    );
+
+    remove_candidate_from_box(
+        candidates,
+        board,
+        trail,
+        row,
+        col,
+        bit,
+    );
 }
 
 fn remove_candidate_from_row(
@@ -417,13 +615,7 @@ fn remove_candidate_from_row(
             continue;
         }
 
-        remove_candidate(
-            candidates,
-            trail,
-            row,
-            peer_col,
-            bit,
-        );
+        remove_candidate(candidates, trail, row, peer_col, bit);
     }
 }
 
@@ -440,13 +632,7 @@ fn remove_candidate_from_column(
             continue;
         }
 
-        remove_candidate(
-            candidates,
-            trail,
-            peer_row,
-            col,
-            bit,
-        );
+        remove_candidate(candidates, trail, peer_row, col, bit);
     }
 }
 
@@ -569,6 +755,7 @@ fn find_hidden_single_in_row(
     row: usize,
 ) -> Option<(usize, usize, u8)> {
     let mut locations = [None; 9];
+    let mut counts = [0u8; 9];
 
     for col in 0..9 {
         if board.is_empty(row, col) {
@@ -576,11 +763,12 @@ fn find_hidden_single_in_row(
                 candidates[row][col],
                 col,
                 &mut locations,
+                &mut counts,
             );
         }
     }
 
-    find_location(locations, |col| (row, col))
+    find_location(locations, counts, |col| (row, col))
 }
 
 fn find_hidden_single_in_column(
@@ -589,6 +777,7 @@ fn find_hidden_single_in_column(
     col: usize,
 ) -> Option<(usize, usize, u8)> {
     let mut locations = [None; 9];
+    let mut counts = [0u8; 9];
 
     for row in 0..9 {
         if board.is_empty(row, col) {
@@ -596,11 +785,12 @@ fn find_hidden_single_in_column(
                 candidates[row][col],
                 row,
                 &mut locations,
+                &mut counts,
             );
         }
     }
 
-    find_location(locations, |row| (row, col))
+    find_location(locations, counts, |row| (row, col))
 }
 
 fn find_hidden_single_in_box(
@@ -610,6 +800,7 @@ fn find_hidden_single_in_box(
     box_col: usize,
 ) -> Option<(usize, usize, u8)> {
     let mut locations = [None; 9];
+    let mut counts = [0u8; 9];
 
     let start_row = box_row * 3;
     let start_col = box_col * 3;
@@ -621,12 +812,13 @@ fn find_hidden_single_in_box(
                     candidates[row][col],
                     row * 9 + col,
                     &mut locations,
+                    &mut counts,
                 );
             }
         }
     }
 
-    find_location(locations, |location| {
+    find_location(locations, counts, |location| {
         (location / 9, location % 9)
     })
 }
@@ -635,25 +827,29 @@ fn record_candidate_locations(
     mask: u16,
     location: usize,
     locations: &mut [Option<usize>; 9],
+    counts: &mut [u8; 9],
 ) {
     for digit in 0..9 {
         if mask & (1 << digit) == 0 {
             continue;
         }
 
-        locations[digit] = match locations[digit] {
-            None => Some(location),
-            Some(_) => None,
-        };
+        counts[digit] += 1;
+
+        if counts[digit] == 1 {
+            locations[digit] = Some(location);
+        }
     }
 }
 
 fn find_location(
     locations: [Option<usize>; 9],
+    counts: [u8; 9],
     make_location: impl Fn(usize) -> (usize, usize),
 ) -> Option<(usize, usize, u8)> {
     for digit in 0..9 {
-        if let Some(location) = locations[digit] {
+        if counts[digit] == 1 {
+            let location = locations[digit].unwrap();
             let (row, col) = make_location(location);
 
             return Some((row, col, digit as u8 + 1));
@@ -702,7 +898,9 @@ fn find_best_empty(
 #[inline]
 fn next_value(mask: &mut u16) -> u8 {
     let bit = mask.trailing_zeros();
+
     *mask &= *mask - 1;
+
     bit as u8 + 1
 }
 
