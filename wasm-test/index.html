@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0"
+    />
+
+    <title>Sudoku WASM Test</title>
+</head>
+
+<body>
+<h1>Sudoku WASM Test</h1>
+
+<button id="test-button">
+    Test Game API
+</button>
+
+<pre id="output"></pre>
+
+<script type="module">
+    import init, {
+        SudokuGame
+    } from "../crates/sudoku-wasm/pkg/sudoku_wasm.js";
+
+    const output = document.getElementById("output");
+    const button = document.getElementById("test-button");
+
+    await init();
+
+    button.addEventListener("click", () => {
+        const lines = [];
+
+        // ------------------------------------------
+        // Empty game
+        // ------------------------------------------
+
+        const game = new SudokuGame();
+
+        lines.push(
+            `Empty cell: ${game.get_cell(0, 0)}`
+        );
+
+        lines.push(
+            `Is given: ${game.is_given(0, 0)}`
+        );
+
+        // ------------------------------------------
+        // Make a legal move
+        // ------------------------------------------
+
+        const moveResult = game.make_move(0, 0, 5);
+
+        lines.push(
+            `make_move(0, 0, 5): ${moveResult}`
+        );
+
+        lines.push(
+            `Cell after move: ${game.get_cell(0, 0)}`
+        );
+
+        // ------------------------------------------
+        // Try an illegal move
+        // ------------------------------------------
+
+        const illegalMove = game.make_move(0, 1, 5);
+
+        lines.push(
+            `make_move(0, 1, 5): ${illegalMove}`
+        );
+
+        lines.push(
+            `Cell [0, 1]: ${game.get_cell(0, 1)}`
+        );
+
+        // ------------------------------------------
+        // Clear player move
+        // ------------------------------------------
+
+        const clearResult = game.clear_move(0, 0);
+
+        lines.push(
+            `clear_move(0, 0): ${clearResult}`
+        );
+
+        lines.push(
+            `Cell after clear: ${game.get_cell(0, 0)}`
+        );
+
+        // ------------------------------------------
+        // Given cell
+        // ------------------------------------------
+
+        const base = SudokuGame.base();
+
+        lines.push(
+            `Base [0, 0]: ${base.get_cell(0, 0)}`
+        );
+
+        lines.push(
+            `Base [0, 0] is given: ${
+                base.is_given(0, 0)
+            }`
+        );
+
+        const givenMove = base.make_move(0, 0, 9);
+
+        lines.push(
+            `Change given cell: ${givenMove}`
+        );
+
+        lines.push(
+            `Base [0, 0] after attempt: ${
+                base.get_cell(0, 0)
+            }`
+        );
+
+        // ------------------------------------------
+        // Output
+        // ------------------------------------------
+
+        output.textContent = lines.join("\n");
+
+        console.log(lines.join("\n"));
+    });
+</script>
+</body>
+</html>

@@ -5,6 +5,7 @@
       <sourceFolder url="file://$MODULE_DIR$/crates/sudoku-engine/benches" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/crates/sudoku-engine/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/sudoku-engine/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/sudoku-wasm/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/crates/sudoku-engine/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
