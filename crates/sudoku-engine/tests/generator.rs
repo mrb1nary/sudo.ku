@@ -1,46 +1,19 @@
-use sudoku_engine::board::Board;
-use sudoku_engine::generator::*;
-use sudoku_engine::solver::{SolverConfig, profile, profile_with_config, solve_with_stats, solve_with_stats_config, Difficulty};
-use sudoku_engine::{generator::generate, solver::count_solutions};
-
-
-pub fn generate_with_difficulty(
-    difficulty: Difficulty,
-    max_attempts: usize,
-) -> Option<Board> {
-    for _ in 0..max_attempts {
-        let puzzle = generate();
-
-        let mut board = puzzle.clone();
-        let profile = profile(&mut board);
-
-        if profile.difficulty() == difficulty {
-            return Some(puzzle);
-        }
-    }
-
-    None
-}
+use sudoku_engine::generator::{generate, generate_with_difficulty};
+use sudoku_engine::solver::{count_solutions, profile, Difficulty};
 
 #[test]
 fn generator_can_target_all_difficulties() {
-    use sudoku_engine::{
-        generator::generate_with_difficulty,
-        solver::{profile, Difficulty},
-    };
-
     for difficulty in [
         Difficulty::Easy,
         Difficulty::Medium,
         Difficulty::Hard,
     ] {
-        let puzzle = generate_with_difficulty(difficulty)
-            .unwrap_or_else(|| {
-                panic!(
-                    "failed to generate a {:?} puzzle within the configured retry limit",
-                    difficulty
-                )
-            });
+        let puzzle = generate_with_difficulty(difficulty).unwrap_or_else(|| {
+            panic!(
+                "failed to generate a {:?} puzzle within the configured retry limit",
+                difficulty
+            )
+        });
 
         let mut board = puzzle.clone();
         let stats = profile(&mut board);
@@ -91,4 +64,3 @@ fn generated_puzzle_has_valid_clue_count() {
     assert!(clues > 0);
     assert!(clues < 81);
 }
-

@@ -1,6 +1,6 @@
 use rand::{rng, seq::SliceRandom};
 
-use crate::{
+pub use crate::{
     board::Board,
     solver::{count_solutions, profile, Difficulty},
 };

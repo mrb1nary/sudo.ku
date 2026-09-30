@@ -2,7 +2,14 @@ use wasm_bindgen::prelude::*;
 
 use sudoku_engine::{
     board::Board,
-    solver::{SolverConfig, SolverStats, solve, solve_with_config, solve_with_stats_config},
+    generator::{generate_with_difficulty, Difficulty},
+    solver::{
+        solve,
+        solve_with_config,
+        solve_with_stats_config,
+        SolverConfig,
+        SolverStats,
+    },
 };
 
 #[wasm_bindgen]
@@ -42,6 +49,34 @@ impl SudokuGame {
         }
     }
 
+    /// Generate a Sudoku puzzle by difficulty.
+    ///
+    /// 0 = Easy
+    /// 1 = Medium
+    /// 2 = Hard
+    ///
+    /// Returns None for an invalid difficulty or if generation fails.
+    pub fn generate(difficulty: u8) -> Option<Self> {
+        let difficulty = match difficulty {
+            0 => Difficulty::Easy,
+            1 => Difficulty::Medium,
+            2 => Difficulty::Hard,
+            _ => return None,
+        };
+
+        let board = generate_with_difficulty(difficulty)?;
+
+        let mut givens = [false; 81];
+
+        for row in 0..9 {
+            for col in 0..9 {
+                givens[row * 9 + col] = !board.is_empty(row, col);
+            }
+        }
+
+        Some(Self { board, givens })
+    }
+
     // --------------------------------------------------
     // Cell access
     // --------------------------------------------------
@@ -78,7 +113,12 @@ impl SudokuGame {
             return false;
         }
 
-        // A move must obey Sudoku rules.
+        // Only Sudoku digits are valid moves.
+        if !(1..=9).contains(&value) {
+            return false;
+        }
+
+        // The move must obey Sudoku rules.
         if !self.board.can_place(row, col, value) {
             return false;
         }
@@ -99,6 +139,17 @@ impl SudokuGame {
         self.board.clear(row, col);
 
         true
+    }
+
+    /// Clear all user-entered values while preserving the original puzzle.
+    pub fn reset(&mut self) {
+        for row in 0..9 {
+            for col in 0..9 {
+                if !self.givens[row * 9 + col] {
+                    self.board.clear(row, col);
+                }
+            }
+        }
     }
 
     // --------------------------------------------------
@@ -122,6 +173,10 @@ impl SudokuGame {
     // --------------------------------------------------
 
     pub fn can_place(&self, row: usize, col: usize, value: u8) -> bool {
+        if !(1..=9).contains(&value) {
+            return false;
+        }
+
         self.board.can_place(row, col, value)
     }
 
@@ -165,19 +220,29 @@ impl SudokuGame {
     }
 
     pub fn solve_with_config(&mut self, use_hidden_singles: bool) -> bool {
-        let config = SolverConfig { use_hidden_singles };
+        let config = SolverConfig {
+            use_hidden_singles,
+        };
 
         solve_with_config(&mut self.board, config)
     }
 
     pub fn solve_with_stats(&mut self) -> Vec<u32> {
-        let stats = solve_with_stats_config(&mut self.board, SolverConfig::default());
+        let stats = solve_with_stats_config(
+            &mut self.board,
+            SolverConfig::default(),
+        );
 
         stats_to_vec(stats)
     }
 
-    pub fn solve_with_stats_config(&mut self, use_hidden_singles: bool) -> Vec<u32> {
-        let config = SolverConfig { use_hidden_singles };
+    pub fn solve_with_stats_config(
+        &mut self,
+        use_hidden_singles: bool,
+    ) -> Vec<u32> {
+        let config = SolverConfig {
+            use_hidden_singles,
+        };
 
         let stats = solve_with_stats_config(&mut self.board, config);
 

@@ -7,123 +7,424 @@
             content="width=device-width, initial-scale=1.0"
     />
 
-    <title>Sudoku WASM Test</title>
+    <title>sudo.ku</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: system-ui, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .game {
+            width: min(94vw, 520px);
+        }
+
+        h1 {
+            text-align: center;
+            margin: 0 0 20px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        select,
+        button {
+            font: inherit;
+            padding: 10px 12px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+        }
+
+        select {
+            flex: 1;
+        }
+
+        .board {
+            width: 100%;
+            aspect-ratio: 1;
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            border: 2px solid #222;
+            background: #222;
+            gap: 1px;
+        }
+
+        .cell {
+            border: 0;
+            border-radius: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            font-size: clamp(20px, 6vw, 34px);
+            font-weight: 400;
+            cursor: pointer;
+        }
+
+        .cell.given {
+            font-weight: 700;
+        }
+
+        .cell.selected {
+            outline: 3px solid #555;
+            outline-offset: -3px;
+        }
+
+        .cell:nth-child(3n) {
+            margin-right: 2px;
+        }
+
+        .cell:nth-child(n+19):nth-child(-n+27),
+        .cell:nth-child(n+46):nth-child(-n+54) {
+            margin-bottom: 2px;
+        }
+
+        .numbers {
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            gap: 6px;
+            margin-top: 14px;
+        }
+
+        .number {
+            aspect-ratio: 1;
+            padding: 0;
+            font-size: 20px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .actions button {
+            flex: 1;
+        }
+
+        #status {
+            min-height: 24px;
+            margin-top: 12px;
+            text-align: center;
+        }
+    </style>
 </head>
 
 <body>
-<h1>Sudoku WASM Test</h1>
+<main class="game">
+    <h1>sudo.ku</h1>
 
-<button id="test-button">
-    Test Game API
-</button>
+    <div class="controls">
+        <select id="difficulty">
+            <option value="0">Easy</option>
+            <option value="1" selected>Medium</option>
+            <option value="2">Hard</option>
+        </select>
 
-<pre id="output"></pre>
+        <button id="new-game">
+            New Game
+        </button>
+    </div>
+
+    <div id="board" class="board"></div>
+
+    <div id="numbers" class="numbers">
+        <button class="number" data-value="1">1</button>
+        <button class="number" data-value="2">2</button>
+        <button class="number" data-value="3">3</button>
+        <button class="number" data-value="4">4</button>
+        <button class="number" data-value="5">5</button>
+        <button class="number" data-value="6">6</button>
+        <button class="number" data-value="7">7</button>
+        <button class="number" data-value="8">8</button>
+        <button class="number" data-value="9">9</button>
+    </div>
+
+    <div class="actions">
+        <button id="clear">
+            Clear
+        </button>
+
+        <button id="reset">
+            Reset
+        </button>
+
+        <button id="solve">
+            Solve
+        </button>
+    </div>
+
+    <div id="status"></div>
+</main>
 
 <script type="module">
     import init, {
         SudokuGame
     } from "../crates/sudoku-wasm/pkg/sudoku_wasm.js";
 
-    const output = document.getElementById("output");
-    const button = document.getElementById("test-button");
-
     await init();
 
-    button.addEventListener("click", () => {
-        const lines = [];
+    const boardElement = document.getElementById("board");
+    const difficultyElement =
+        document.getElementById("difficulty");
 
-        // ------------------------------------------
-        // Empty game
-        // ------------------------------------------
+    const newGameButton =
+        document.getElementById("new-game");
 
-        const game = new SudokuGame();
+    const clearButton =
+        document.getElementById("clear");
 
-        lines.push(
-            `Empty cell: ${game.get_cell(0, 0)}`
+    const resetButton =
+        document.getElementById("reset");
+
+    const solveButton =
+        document.getElementById("solve");
+
+    const statusElement =
+        document.getElementById("status");
+
+    let game = null;
+    let selectedRow = null;
+    let selectedCol = null;
+
+    function createBoard() {
+        boardElement.innerHTML = "";
+
+        for (let row = 0; row < 9; row++) {
+            for (let col = 0; col < 9; col++) {
+                const cell = document.createElement("button");
+
+                cell.className = "cell";
+                cell.dataset.row = row;
+                cell.dataset.col = col;
+
+                cell.addEventListener("click", () => {
+                    selectCell(row, col);
+                });
+
+                boardElement.appendChild(cell);
+            }
+        }
+    }
+
+    function renderBoard() {
+        const cells = boardElement.children;
+
+        for (let row = 0; row < 9; row++) {
+            for (let col = 0; col < 9; col++) {
+                const index = row * 9 + col;
+                const cell = cells[index];
+
+                const value = game.get_cell(row, col);
+                const given = game.is_given(row, col);
+
+                cell.textContent = value === 0 ? "" : value;
+
+                cell.classList.toggle("given", given);
+
+                cell.classList.toggle(
+                    "selected",
+                    row === selectedRow &&
+                    col === selectedCol
+                );
+            }
+        }
+    }
+
+    function selectCell(row, col) {
+        selectedRow = row;
+        selectedCol = col;
+
+        renderBoard();
+
+        if (game.is_given(row, col)) {
+            statusElement.textContent = "Given cell";
+        } else {
+            statusElement.textContent = "";
+        }
+    }
+
+    function makeMove(value) {
+        if (
+            selectedRow === null ||
+            selectedCol === null
+        ) {
+            statusElement.textContent =
+                "Select a cell first";
+
+            return;
+        }
+
+        if (
+            game.is_given(
+                selectedRow,
+                selectedCol
+            )
+        ) {
+            statusElement.textContent =
+                "You cannot change a given cell";
+
+            return;
+        }
+
+        const success = game.make_move(
+            selectedRow,
+            selectedCol,
+            value
         );
 
-        lines.push(
-            `Is given: ${game.is_given(0, 0)}`
+        if (!success) {
+            statusElement.textContent =
+                "Invalid move";
+
+            return;
+        }
+
+        statusElement.textContent = "";
+
+        renderBoard();
+    }
+
+    function clearSelectedCell() {
+        if (
+            selectedRow === null ||
+            selectedCol === null
+        ) {
+            return;
+        }
+
+        const success = game.clear_move(
+            selectedRow,
+            selectedCol
         );
 
-        // ------------------------------------------
-        // Make a legal move
-        // ------------------------------------------
+        if (!success) {
+            statusElement.textContent =
+                "Cannot clear this cell";
 
-        const moveResult = game.make_move(0, 0, 5);
+            return;
+        }
 
-        lines.push(
-            `make_move(0, 0, 5): ${moveResult}`
-        );
+        statusElement.textContent = "";
 
-        lines.push(
-            `Cell after move: ${game.get_cell(0, 0)}`
-        );
+        renderBoard();
+    }
 
-        // ------------------------------------------
-        // Try an illegal move
-        // ------------------------------------------
+    function newGame() {
+        const difficulty =
+            Number(difficultyElement.value);
 
-        const illegalMove = game.make_move(0, 1, 5);
+        const newGame =
+            SudokuGame.generate(difficulty);
 
-        lines.push(
-            `make_move(0, 1, 5): ${illegalMove}`
-        );
+        if (newGame === undefined) {
+            statusElement.textContent =
+                "Failed to generate puzzle";
 
-        lines.push(
-            `Cell [0, 1]: ${game.get_cell(0, 1)}`
-        );
+            return;
+        }
 
-        // ------------------------------------------
-        // Clear player move
-        // ------------------------------------------
+        game = newGame;
 
-        const clearResult = game.clear_move(0, 0);
+        selectedRow = null;
+        selectedCol = null;
 
-        lines.push(
-            `clear_move(0, 0): ${clearResult}`
-        );
+        statusElement.textContent = "";
 
-        lines.push(
-            `Cell after clear: ${game.get_cell(0, 0)}`
-        );
+        renderBoard();
+    }
 
-        // ------------------------------------------
-        // Given cell
-        // ------------------------------------------
+    function resetGame() {
+        game.reset();
 
-        const base = SudokuGame.base();
+        selectedRow = null;
+        selectedCol = null;
 
-        lines.push(
-            `Base [0, 0]: ${base.get_cell(0, 0)}`
-        );
+        statusElement.textContent = "";
 
-        lines.push(
-            `Base [0, 0] is given: ${
-                base.is_given(0, 0)
-            }`
-        );
+        renderBoard();
+    }
 
-        const givenMove = base.make_move(0, 0, 9);
+    function solveGame() {
+        const solved = game.solve();
 
-        lines.push(
-            `Change given cell: ${givenMove}`
-        );
+        selectedRow = null;
+        selectedCol = null;
 
-        lines.push(
-            `Base [0, 0] after attempt: ${
-                base.get_cell(0, 0)
-            }`
-        );
+        statusElement.textContent = solved
+            ? "Solved"
+            : "Unable to solve";
 
-        // ------------------------------------------
-        // Output
-        // ------------------------------------------
+        renderBoard();
+    }
 
-        output.textContent = lines.join("\n");
+    document
+        .querySelectorAll(".number")
+        .forEach((button) => {
+            button.addEventListener("click", () => {
+                const value =
+                    Number(button.dataset.value);
 
-        console.log(lines.join("\n"));
-    });
+                makeMove(value);
+            });
+        });
+
+    newGameButton.addEventListener(
+        "click",
+        newGame
+    );
+
+    clearButton.addEventListener(
+        "click",
+        clearSelectedCell
+    );
+
+    resetButton.addEventListener(
+        "click",
+        resetGame
+    );
+
+    solveButton.addEventListener(
+        "click",
+        solveGame
+    );
+
+    document.addEventListener(
+        "keydown",
+        (event) => {
+            if (
+                event.key >= "1" &&
+                event.key <= "9"
+            ) {
+                makeMove(Number(event.key));
+            }
+
+            if (
+                event.key === "Backspace" ||
+                event.key === "Delete"
+            ) {
+                clearSelectedCell();
+            }
+        }
+    );
+
+    createBoard();
+    newGame();
 </script>
 </body>
 </html>
