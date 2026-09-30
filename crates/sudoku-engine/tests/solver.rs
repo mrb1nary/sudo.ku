@@ -18,14 +18,6 @@ fn board_from_string(puzzle: &str) -> Board {
     board
 }
 
-fn assert_solved(board: &Board) {
-    for row in 0..9 {
-        for col in 0..9 {
-            assert!(!board.is_empty(row, col));
-        }
-    }
-}
-
 fn inspect_stats(name: &str, puzzle: &str) {
     let mut board = board_from_string(puzzle);
 
@@ -104,6 +96,8 @@ fn assert_valid_solution(board: &Board) {
         }
     }
 }
+
+
 #[test]
 fn inspect_solver_stats() {
     inspect_stats(
@@ -149,6 +143,7 @@ fn inspect_solver_stats() {
     );
 }
 
+
 #[test]
 fn incremental_cache_survives_backtracking() {
     let mut board = board_from_string(
@@ -178,3 +173,36 @@ fn incremental_cache_survives_backtracking() {
 
     assert_valid_solution(&board);
 }
+
+
+#[test]
+fn inspect_advanced_techniques() {
+    let puzzles = [
+        (
+            "hard",
+            "\
+            005300000\
+            800000020\
+            070010500\
+            400005300\
+            010070006\
+            003200080\
+            060500009\
+            004000030\
+            000009700",
+        ),
+    ];
+
+    for (name, puzzle) in puzzles {
+        let mut board = board_from_string(puzzle);
+
+        let stats = solve_with_stats(&mut board);
+
+        println!("\n{name}");
+        println!("{stats:#?}");
+
+        assert_valid_solution(&board);
+    }
+}
+
+
