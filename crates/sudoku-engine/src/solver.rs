@@ -1,8 +1,13 @@
-use crate::board::Board;
 
+use crate::board::Board;
+pub use crate::technique::{Difficulty, SolverProfile, Technique};
+use crate::technique::{
+    find_hidden_single, find_locked_candidates, find_naked_pair, find_naked_quad,
+    find_naked_single, find_naked_triple, find_swordfish, find_x_wing,
+};
 const ALL_DIGITS: u16 = 0b1_1111_1111;
 
-type CandidateCache = [[u16; 9]; 9];
+pub(crate) type CandidateCache = [[u16; 9]; 9];
 
 #[derive(Debug, Default)]
 pub struct SolverStats {
@@ -11,7 +16,9 @@ pub struct SolverStats {
     pub hidden_singles: usize,
     pub branches: usize,
     pub backtracks: usize,
+    pub hardest_technique: Technique,
 }
+
 
 #[derive(Debug, Clone, Copy)]
 pub struct SolverConfig {
@@ -25,6 +32,7 @@ impl Default for SolverConfig {
         }
     }
 }
+
 
 #[derive(Clone)]
 pub struct SolverState {
@@ -92,7 +100,8 @@ impl SolverState {
     }
 }
 
-enum Undo {
+
+pub(crate) enum Undo {
     BoardCell {
         row: usize,
         col: usize,
@@ -116,7 +125,7 @@ enum Undo {
     },
 }
 
-struct Trail {
+pub(crate) struct Trail {
     entries: Vec<Undo>,
 }
 
@@ -133,7 +142,7 @@ impl Trail {
     }
 
     #[inline]
-    fn push(&mut self, undo: Undo) {
+    pub(crate) fn push(&mut self, undo: Undo) {
         self.entries.push(undo);
     }
 
@@ -221,6 +230,30 @@ fn count_recursive(
 
                 continue;
             }
+        }
+
+        if find_naked_pair(board, candidates, trail) {
+            continue;
+        }
+
+        if find_naked_triple(board, candidates, trail) {
+            continue;
+        }
+
+        if find_naked_quad(board, candidates, trail) {
+            continue;
+        }
+
+        if find_locked_candidates(board, candidates, trail) {
+            continue;
+        }
+
+        if find_x_wing(board, candidates, trail) {
+            continue;
+        }
+
+        if find_swordfish(board, candidates, trail) {
+            continue;
         }
 
         break;
@@ -349,15 +382,6 @@ pub fn solve_with_stats_config(
     stats
 }
 
-#[derive(Debug, Default, Clone, Copy)]
-pub struct SolverProfile {
-    pub clues: usize,
-    pub recursive_calls: usize,
-    pub forced_moves: usize,
-    pub hidden_singles: usize,
-    pub branches: usize,
-    pub backtracks: usize,
-}
 
 fn count_clues(board: &Board) -> usize {
     let mut clues = 0;
@@ -403,6 +427,7 @@ fn solve_recursive(
             );
 
             record_forced_move(&mut stats);
+            record_technique(&mut stats, Technique::NakedSingle);
             continue;
         }
 
@@ -422,8 +447,39 @@ fn solve_recursive(
 
                 record_forced_move(&mut stats);
                 record_hidden_single(&mut stats);
+                record_technique(&mut stats, Technique::HiddenSingle);
                 continue;
             }
+        }
+
+        if find_naked_pair(board, candidates, trail) {
+            record_technique(&mut stats, Technique::NakedPair);
+            continue;
+        }
+
+        if find_naked_triple(board, candidates, trail) {
+            record_technique(&mut stats, Technique::NakedTriple);
+            continue;
+        }
+
+        if find_naked_quad(board, candidates, trail) {
+            record_technique(&mut stats, Technique::NakedQuad);
+            continue;
+        }
+
+        if find_locked_candidates(board, candidates, trail) {
+            record_technique(&mut stats, Technique::LockedCandidates);
+            continue;
+        }
+
+        if find_x_wing(board, candidates, trail) {
+            record_technique(&mut stats, Technique::XWing);
+            continue;
+        }
+
+        if find_swordfish(board, candidates, trail) {
+            record_technique(&mut stats, Technique::Swordfish);
+            continue;
         }
 
         break;
@@ -443,6 +499,7 @@ fn solve_recursive(
     }
 
     record_branch(&mut stats);
+    record_technique(&mut stats, Technique::Guess);
 
     while remaining != 0 {
         let value = next_value(&mut remaining);
@@ -496,6 +553,7 @@ pub fn profile_with_config(
         hidden_singles: stats.hidden_singles,
         branches: stats.branches,
         backtracks: stats.backtracks,
+        hardest_technique: stats.hardest_technique,
     }
 }
 
@@ -690,174 +748,6 @@ fn remove_candidate(
     candidates[row][col] = next;
 }
 
-fn find_naked_single(
-    board: &Board,
-    candidates: &CandidateCache,
-) -> Option<(usize, usize, u8)> {
-    for row in 0..9 {
-        for col in 0..9 {
-            if !board.is_empty(row, col) {
-                continue;
-            }
-
-            let mask = candidates[row][col];
-
-            if mask.count_ones() == 1 {
-                return Some((row, col, mask_to_value(mask)));
-            }
-        }
-    }
-
-    None
-}
-
-fn find_hidden_single(
-    board: &Board,
-    candidates: &CandidateCache,
-) -> Option<(usize, usize, u8)> {
-    for row in 0..9 {
-        if let Some(result) =
-            find_hidden_single_in_row(board, candidates, row)
-        {
-            return Some(result);
-        }
-    }
-
-    for col in 0..9 {
-        if let Some(result) =
-            find_hidden_single_in_column(board, candidates, col)
-        {
-            return Some(result);
-        }
-    }
-
-    for box_row in 0..3 {
-        for box_col in 0..3 {
-            if let Some(result) =
-                find_hidden_single_in_box(
-                    board,
-                    candidates,
-                    box_row,
-                    box_col,
-                )
-            {
-                return Some(result);
-            }
-        }
-    }
-
-    None
-}
-
-fn find_hidden_single_in_row(
-    board: &Board,
-    candidates: &CandidateCache,
-    row: usize,
-) -> Option<(usize, usize, u8)> {
-    let mut locations = [None; 9];
-    let mut counts = [0u8; 9];
-
-    for col in 0..9 {
-        if board.is_empty(row, col) {
-            record_candidate_locations(
-                candidates[row][col],
-                col,
-                &mut locations,
-                &mut counts,
-            );
-        }
-    }
-
-    find_location(locations, counts, |col| (row, col))
-}
-
-fn find_hidden_single_in_column(
-    board: &Board,
-    candidates: &CandidateCache,
-    col: usize,
-) -> Option<(usize, usize, u8)> {
-    let mut locations = [None; 9];
-    let mut counts = [0u8; 9];
-
-    for row in 0..9 {
-        if board.is_empty(row, col) {
-            record_candidate_locations(
-                candidates[row][col],
-                row,
-                &mut locations,
-                &mut counts,
-            );
-        }
-    }
-
-    find_location(locations, counts, |row| (row, col))
-}
-
-fn find_hidden_single_in_box(
-    board: &Board,
-    candidates: &CandidateCache,
-    box_row: usize,
-    box_col: usize,
-) -> Option<(usize, usize, u8)> {
-    let mut locations = [None; 9];
-    let mut counts = [0u8; 9];
-
-    let start_row = box_row * 3;
-    let start_col = box_col * 3;
-
-    for row in start_row..start_row + 3 {
-        for col in start_col..start_col + 3 {
-            if board.is_empty(row, col) {
-                record_candidate_locations(
-                    candidates[row][col],
-                    row * 9 + col,
-                    &mut locations,
-                    &mut counts,
-                );
-            }
-        }
-    }
-
-    find_location(locations, counts, |location| {
-        (location / 9, location % 9)
-    })
-}
-
-fn record_candidate_locations(
-    mask: u16,
-    location: usize,
-    locations: &mut [Option<usize>; 9],
-    counts: &mut [u8; 9],
-) {
-    for digit in 0..9 {
-        if mask & (1 << digit) == 0 {
-            continue;
-        }
-
-        counts[digit] += 1;
-
-        if counts[digit] == 1 {
-            locations[digit] = Some(location);
-        }
-    }
-}
-
-fn find_location(
-    locations: [Option<usize>; 9],
-    counts: [u8; 9],
-    make_location: impl Fn(usize) -> (usize, usize),
-) -> Option<(usize, usize, u8)> {
-    for digit in 0..9 {
-        if counts[digit] == 1 {
-            let location = locations[digit].unwrap();
-            let (row, col) = make_location(location);
-
-            return Some((row, col, digit as u8 + 1));
-        }
-    }
-
-    None
-}
 
 fn find_best_empty(
     board: &Board,
@@ -917,6 +807,16 @@ fn digit_bit(value: u8) -> u16 {
 #[inline]
 fn box_index(row: usize, col: usize) -> usize {
     (row / 3) * 3 + (col / 3)
+}
+
+#[inline]
+fn record_technique(
+    stats: &mut Option<&mut SolverStats>,
+    technique: Technique,
+) {
+    if let Some(stats) = stats.as_deref_mut() {
+        stats.hardest_technique = stats.hardest_technique.max(technique);
+    }
 }
 
 #[inline]

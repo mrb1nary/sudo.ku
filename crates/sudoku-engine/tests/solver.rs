@@ -58,12 +58,7 @@ fn assert_valid_solution(board: &Board) {
         for col in 0..9 {
             let value = board.get(row, col) as usize;
 
-            assert!(
-                !seen[value],
-                "duplicate {} in row {}",
-                value,
-                row + 1
-            );
+            assert!(!seen[value], "duplicate {} in row {}", value, row + 1);
 
             seen[value] = true;
         }
@@ -78,12 +73,7 @@ fn assert_valid_solution(board: &Board) {
         for row in 0..9 {
             let value = board.get(row, col) as usize;
 
-            assert!(
-                !seen[value],
-                "duplicate {} in column {}",
-                value,
-                col + 1
-            );
+            assert!(!seen[value], "duplicate {} in column {}", value, col + 1);
 
             seen[value] = true;
         }
@@ -103,9 +93,7 @@ fn assert_valid_solution(board: &Board) {
                     assert!(
                         !seen[value],
                         "duplicate {} in box ({}, {})",
-                        value,
-                        box_row,
-                        box_col
+                        value, box_row, box_col
                     );
 
                     seen[value] = true;
@@ -160,7 +148,6 @@ fn inspect_solver_stats() {
         000009700",
     );
 }
-
 
 #[test]
 fn incremental_cache_survives_backtracking() {

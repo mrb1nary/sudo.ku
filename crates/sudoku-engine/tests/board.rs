@@ -1,17 +1,16 @@
 mod tests {
-    use rand::{rng, RngExt};
-    use sudoku_engine::board::Board;
     use super::*;
+    use rand::{RngExt, rng};
+    use sudoku_engine::board::Board;
 
     #[test]
     fn empty_board() {
         let mut board = Board::empty();
 
-        board.set(5,5,7);
+        board.set(5, 5, 7);
 
         assert_eq!(board.get(5, 5), 7);
     }
-
 
     #[test]
     fn base_board() {
@@ -201,6 +200,4 @@ mod tests {
         assert!(!board.can_place(2, 2, 5));
         assert!(board.can_place(2, 2, 7));
     }
-
-
 }

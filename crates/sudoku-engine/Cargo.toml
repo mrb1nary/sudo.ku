@@ -12,3 +12,11 @@ criterion = "0.8.2"
 [[bench]]
 name = "solver"
 harness = false
+
+[[bench]]
+name = "generator"
+harness = false
+
+[[bench]]
+name = "puzzle_analysis"
+harness = false

@@ -2,13 +2,7 @@ use wasm_bindgen::prelude::*;
 
 use sudoku_engine::{
     board::Board,
-    solver::{
-        solve,
-        solve_with_config,
-        solve_with_stats_config,
-        SolverConfig,
-        SolverStats,
-    },
+    solver::{SolverConfig, SolverStats, solve, solve_with_config, solve_with_stats_config},
 };
 
 #[wasm_bindgen]
@@ -76,12 +70,7 @@ impl SudokuGame {
         self.givens[row * 9 + col]
     }
 
-    pub fn make_move(
-        &mut self,
-        row: usize,
-        col: usize,
-        value: u8,
-    ) -> bool {
+    pub fn make_move(&mut self, row: usize, col: usize, value: u8) -> bool {
         let index = row * 9 + col;
 
         // Given cells cannot be changed.
@@ -132,12 +121,7 @@ impl SudokuGame {
     // Validation
     // --------------------------------------------------
 
-    pub fn can_place(
-        &self,
-        row: usize,
-        col: usize,
-        value: u8,
-    ) -> bool {
+    pub fn can_place(&self, row: usize, col: usize, value: u8) -> bool {
         self.board.can_place(row, col, value)
     }
 
@@ -180,36 +164,22 @@ impl SudokuGame {
         solve(&mut self.board)
     }
 
-    pub fn solve_with_config(
-        &mut self,
-        use_hidden_singles: bool,
-    ) -> bool {
-        let config = SolverConfig {
-            use_hidden_singles,
-        };
+    pub fn solve_with_config(&mut self, use_hidden_singles: bool) -> bool {
+        let config = SolverConfig { use_hidden_singles };
 
         solve_with_config(&mut self.board, config)
     }
 
     pub fn solve_with_stats(&mut self) -> Vec<u32> {
-        let stats = solve_with_stats_config(
-            &mut self.board,
-            SolverConfig::default(),
-        );
+        let stats = solve_with_stats_config(&mut self.board, SolverConfig::default());
 
         stats_to_vec(stats)
     }
 
-    pub fn solve_with_stats_config(
-        &mut self,
-        use_hidden_singles: bool,
-    ) -> Vec<u32> {
-        let config = SolverConfig {
-            use_hidden_singles,
-        };
+    pub fn solve_with_stats_config(&mut self, use_hidden_singles: bool) -> Vec<u32> {
+        let config = SolverConfig { use_hidden_singles };
 
-        let stats =
-            solve_with_stats_config(&mut self.board, config);
+        let stats = solve_with_stats_config(&mut self.board, config);
 
         stats_to_vec(stats)
     }
