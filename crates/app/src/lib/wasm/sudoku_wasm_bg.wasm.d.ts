@@ -1,0 +1,31 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const __wbg_sudokugame_free: (a: number, b: number) => void;
+export const sudokugame_base: () => number;
+export const sudokugame_can_place: (a: number, b: number, c: number, d: number) => number;
+export const sudokugame_clear_move: (a: number, b: number, c: number) => number;
+export const sudokugame_find_empty: (a: number) => [number, number];
+export const sudokugame_from_puzzle: (a: number, b: number) => number;
+export const sudokugame_generate: (a: number) => number;
+export const sudokugame_get_board: (a: number) => [number, number];
+export const sudokugame_get_cell: (a: number, b: number, c: number) => number;
+export const sudokugame_is_complete: (a: number) => number;
+export const sudokugame_is_correct: (a: number, b: number, c: number, d: number) => number;
+export const sudokugame_is_empty: (a: number, b: number, c: number) => number;
+export const sudokugame_is_given: (a: number, b: number, c: number) => number;
+export const sudokugame_is_solved: (a: number) => number;
+export const sudokugame_make_move: (a: number, b: number, c: number, d: number) => number;
+export const sudokugame_new: () => number;
+export const sudokugame_random: () => number;
+export const sudokugame_reset: (a: number) => void;
+export const sudokugame_solve: (a: number) => number;
+export const sudokugame_solve_with_config: (a: number, b: number) => number;
+export const sudokugame_solve_with_stats: (a: number) => [number, number];
+export const sudokugame_solve_with_stats_config: (a: number, b: number) => [number, number];
+export const __wbindgen_exn_store: (a: number) => void;
+export const __externref_table_alloc: () => number;
+export const __wbindgen_externrefs: WebAssembly.Table;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
+export const __wbindgen_malloc: (a: number, b: number) => number;
+export const __wbindgen_start: () => void;
