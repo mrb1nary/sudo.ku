@@ -1,3 +1,4 @@
+
 <script lang="ts">
   import { onMount } from "svelte";
   import SudokuBoard from "./lib/SudokuBoard.svelte";
@@ -516,7 +517,8 @@
     transition:
             background 140ms ease,
             color 140ms ease,
-            opacity 140ms ease;
+            opacity 140ms ease,
+            transform 100ms ease;
   }
 
   .mode-switch button:hover:not(
@@ -526,6 +528,12 @@
             var(--button-hover);
 
     color: var(--text);
+  }
+
+  .mode-switch button:active:not(
+        :disabled
+    ) {
+    transform: scale(0.97);
   }
 
   .mode-switch button.active {
@@ -586,12 +594,23 @@
 
     transition:
             border-color 140ms ease,
-            background 140ms ease;
+            background 140ms ease,
+            transform 100ms ease;
   }
 
   .theme-select-wrap:hover {
     border-color:
             var(--border-strong);
+  }
+
+  .theme-select-wrap:focus-within {
+    border-color: var(--accent);
+    box-shadow:
+            0 0 0 2px var(--accent-soft);
+  }
+
+  .theme-select-wrap:active {
+    transform: scale(0.98);
   }
 
   .theme-icon {
@@ -719,46 +738,211 @@
             var(--background-glow);
   }
 
+  /*
+   * Desktop layout stays intentionally roomy.
+   * Do not compact the header, page spacing, game shell,
+   * or Sudoku board at desktop widths.
+   */
+  @media (min-width: 701px) {
+    .nav {
+      min-height: 68px;
+      width: min(
+              calc(100% - 2rem),
+              1100px
+      );
+      gap: 1rem;
+    }
+
+    .page {
+      min-height: calc(100vh - 68px);
+      padding: 2.5rem 1rem 4rem;
+      gap: 2rem;
+    }
+
+    .game-shell {
+      width: min(100%, 620px);
+      padding: 1rem;
+      border-radius: 18px;
+    }
+
+    .game-shell :global(.board) {
+      width: min(90vw, 540px);
+    }
+  }
+
+  /*
+   * Mobile header:
+   *
+   * Keep the entire navigation on one compact row.
+   * The game screen is vertical-space hungry, so the
+   * header should get out of its way.
+   */
   @media (max-width: 700px) {
     .nav {
       grid-template-columns:
-                1fr auto;
+              auto
+              1fr
+              auto;
 
       grid-template-areas:
-                "brand theme"
-                "mode mode";
+              "brand mode theme";
 
-      padding: 0.75rem 0;
+      width: calc(100% - 0.7rem);
 
-      min-height: auto;
+      min-height: 0;
+
+      padding: 0.45rem 0;
+
+      gap: 0.45rem;
     }
 
     .brand {
       grid-area: brand;
+
+      gap: 0.45rem;
     }
 
-    .theme-picker {
-      grid-area: theme;
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+
+      border-radius: 8px;
+
+      font-size: 0.85rem;
+    }
+
+    .brand-name {
+      font-size: 0.92rem;
     }
 
     .mode-switch {
       grid-area: mode;
 
       justify-self: center;
+
+      width: fit-content;
+
+      padding: 0.18rem;
+
+      border-radius: 9px;
+    }
+
+    .mode-switch button {
+      padding:
+              0.42rem
+              0.65rem;
+
+      font-size: 0.74rem;
+
+      white-space: nowrap;
+    }
+
+    .theme-picker {
+      grid-area: theme;
+
+      justify-self: end;
+
+      gap: 0;
     }
 
     .theme-label {
       display: none;
     }
 
+    .theme-select-wrap {
+      padding: 0 0.42rem;
+      border-radius: 8px;
+    }
+
+    .theme-select-wrap select {
+      min-width: 72px;
+
+      padding:
+              0.42rem
+              0.9rem
+              0.42rem
+              0.05rem;
+
+      font-size: 0.72rem;
+    }
+
     .page {
-      padding-top: 1.75rem;
+      min-height:
+              calc(100vh - 54px);
+
+      padding:
+              1rem
+              0.35rem
+              2rem;
+
+      gap: 1rem;
+    }
+
+    .hero {
+      width: min(92vw, 540px);
+    }
+
+    .hero .eyebrow {
+      margin-bottom: 0.35rem;
+
+      font-size: 0.58rem;
+    }
+
+    .hero h1 {
+      font-size: 2rem;
+    }
+
+    .hero .subtitle {
+      margin-top: 0.45rem;
+
+      font-size: 0.78rem;
     }
 
     .game-shell {
-      padding: 0.65rem;
+      width: 100%;
 
-      border-radius: 14px;
+      padding: 0.35rem;
+
+      border-radius: 12px;
+    }
+  }
+
+  @media (max-width: 380px) {
+    .nav {
+      width: calc(100% - 0.4rem);
+
+      gap: 0.25rem;
+    }
+
+    .brand-name {
+      display: none;
+    }
+
+    .mode-switch button {
+      padding:
+              0.4rem
+              0.48rem;
+
+      font-size: 0.68rem;
+    }
+
+    .theme-select-wrap {
+      padding: 0 0.3rem;
+    }
+
+    .theme-select-wrap select {
+      min-width: 58px;
+
+      max-width: 58px;
+
+      font-size: 0.66rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mode-switch button,
+    .theme-select-wrap {
+      transition: none;
     }
   }
 </style>

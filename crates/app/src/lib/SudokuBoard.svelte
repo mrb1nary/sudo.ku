@@ -38,8 +38,6 @@
     let solved = $state(false);
     let lockedCells = $state(new Set<number>());
     let incorrectValues = $state(new Map<number, number>());
-    let incorrectCell = $state<number | null>(null);
-    let animationTimer: ReturnType<typeof setTimeout> | null = null;
 
     $effect(() => {
         syncVersion;
@@ -51,19 +49,6 @@
         incorrectValues = new Map();
     });
 
-    $effect(() => {
-        if (
-            multiplayer &&
-            rejectedCell !== null &&
-            rejectedCell !== undefined
-        ) {
-            triggerIncorrectAnimation(
-                rejectedCell,
-                rejectedValue ?? 0,
-            );
-        }
-    });
-
     onMount(async () => {
         await initializeSudoku();
 
@@ -71,53 +56,70 @@
             startNewGame();
         }
 
-        return () => {
-            if (animationTimer) {
-                clearTimeout(animationTimer);
+        /*
+         * Keyboard controls
+         *
+         * 1-9       -> enter number
+         * Backspace -> clear cell
+         * Delete    -> clear cell
+         */
+        function handleKeyboard(event: KeyboardEvent) {
+            /*
+             * Don't steal keyboard input when the user is
+             * interacting with another form control.
+             */
+            const target = event.target as HTMLElement | null;
+
+            if (
+                target?.tagName === "INPUT" ||
+                target?.tagName === "TEXTAREA" ||
+                target?.tagName === "SELECT" ||
+                target?.isContentEditable
+            ) {
+                return;
             }
-        };
-    });
 
-    function triggerIncorrectAnimation(
-        cell: number,
-        value: number,
-    ) {
-        incorrectCell = null;
+            if (event.key >= "1" && event.key <= "9") {
+                event.preventDefault();
 
-        if (animationTimer) {
-            clearTimeout(animationTimer);
+                enterNumber(
+                    Number(event.key),
+                );
+
+                return;
+            }
+
+            if (
+                event.key === "Backspace" ||
+                event.key === "Delete"
+            ) {
+                event.preventDefault();
+
+                clearCell();
+            }
         }
 
-        /*
-         * Force the class to be removed and re-added.
-         * This guarantees the CSS animation restarts even if
-         * the user makes the same mistake twice in a row.
-         */
-        requestAnimationFrame(() => {
-            incorrectCell = cell;
+        window.addEventListener(
+            "keydown",
+            handleKeyboard,
+        );
 
-            incorrectValues = new Map(
-                incorrectValues,
+        return () => {
+            window.removeEventListener(
+                "keydown",
+                handleKeyboard,
             );
-
-            incorrectValues.set(cell, value);
-        });
-
-        animationTimer = setTimeout(() => {
-            incorrectCell = null;
-
-            incorrectValues = new Map(
-                incorrectValues,
-            );
-
-            incorrectValues.delete(cell);
-        }, 420);
-    }
+        };
+    });
 
     function startNewGame() {
         if (multiplayer) return;
 
-        const newGame = SudokuGame.generate(difficulty);
+        const newGame =
+            SudokuGame.generate(
+                difficulty,
+            );
+
         if (!newGame) return;
 
         game = newGame;
@@ -125,105 +127,137 @@
         solved = false;
         lockedCells = new Set();
         incorrectValues = new Map();
-        incorrectCell = null;
     }
 
     function resetGame() {
         if (!game || multiplayer) return;
 
         game.reset();
+
         selectedCell = null;
         solved = false;
         lockedCells = new Set();
         incorrectValues = new Map();
-        incorrectCell = null;
     }
 
-    function getServerMove(index: number): ServerMove | undefined {
-        return multiplayer ? serverMoves.get(index) : undefined;
+    function getServerMove(
+        index: number,
+    ): ServerMove | undefined {
+        return multiplayer
+            ? serverMoves.get(index)
+            : undefined;
     }
 
-    function getDisplayedValue(index: number): number {
+    function getDisplayedValue(
+        index: number,
+    ): number {
         if (!game) return 0;
 
-        const serverMove = getServerMove(index);
+        const serverMove =
+            getServerMove(index);
 
         if (serverMove) {
             return serverMove.value;
         }
 
-        const row = Math.floor(index / 9);
-        const col = index % 9;
+        const row =
+            Math.floor(index / 9);
 
-        return game.get_cell(row, col);
+        const col =
+            index % 9;
+
+        return game.get_cell(
+            row,
+            col,
+        );
     }
 
     function selectCell(index: number) {
         if (!game || solved) return;
 
-        const row = Math.floor(index / 9);
-        const col = index % 9;
+        const row =
+            Math.floor(index / 9);
 
-        /*
-         * Given cells can still be selected so their number
-         * can be highlighted across the board.
-         */
-        if (game.is_given(row, col)) {
-            selectedCell = index;
-            return;
-        }
+        const col =
+            index % 9;
 
         if (multiplayer) {
-            if (getDisplayedValue(index) !== 0) return;
+            if (
+                getDisplayedValue(index) !== 0
+            ) {
+                return;
+            }
 
             selectedCell = index;
+
             return;
         }
 
-        if (lockedCells.has(index)) return;
+        if (game.is_given(row, col)) {
+            return;
+        }
+
+        if (lockedCells.has(index)) {
+            return;
+        }
 
         selectedCell = index;
     }
 
     function enterNumber(value: number) {
-        if (!game || selectedCell === null || solved) return;
-        if (lockedCells.has(selectedCell)) return;
-
-        const row = Math.floor(selectedCell / 9);
-        const col = selectedCell % 9;
-
-        if (game.is_given(row, col)) return;
-
-        if (multiplayer) {
-            onMove?.(row, col, value);
+        if (
+            !game ||
+            selectedCell === null ||
+            solved
+        ) {
             return;
         }
 
-        /*
-         * Wrong number:
-         *
-         * Don't mutate the board. Instead trigger the visual
-         * feedback animation on the selected cell.
-         */
-        if (!game.is_correct(row, col, value)) {
-            triggerIncorrectAnimation(
-                selectedCell,
+        if (lockedCells.has(selectedCell)) {
+            return;
+        }
+
+        const row =
+            Math.floor(selectedCell / 9);
+
+        const col =
+            selectedCell % 9;
+
+        if (multiplayer) {
+            onMove?.(
+                row,
+                col,
                 value,
             );
 
             return;
         }
 
-        const accepted = game.make_move(
-            row,
-            col,
-            value,
-        );
+        if (
+            !game.is_correct(
+                row,
+                col,
+                value,
+            )
+        ) {
+            return;
+        }
+
+        const accepted =
+            game.make_move(
+                row,
+                col,
+                value,
+            );
 
         if (!accepted) return;
 
-        lockedCells.add(selectedCell);
-        lockedCells = new Set(lockedCells);
+        lockedCells.add(
+            selectedCell,
+        );
+
+        lockedCells =
+            new Set(lockedCells);
 
         if (game.is_solved()) {
             solved = true;
@@ -231,34 +265,59 @@
     }
 
     function clearCell() {
-        if (!game || selectedCell === null || solved) return;
-        if (lockedCells.has(selectedCell)) return;
-
-        const row = Math.floor(selectedCell / 9);
-        const col = selectedCell % 9;
-
-        if (game.is_given(row, col)) return;
-
-        if (multiplayer) {
-            onClear?.(row, col);
+        if (
+            !game ||
+            selectedCell === null ||
+            solved
+        ) {
             return;
         }
 
-        game.clear_move(row, col);
+        if (lockedCells.has(selectedCell)) {
+            return;
+        }
+
+        const row =
+            Math.floor(selectedCell / 9);
+
+        const col =
+            selectedCell % 9;
+
+        if (multiplayer) {
+            onClear?.(
+                row,
+                col,
+            );
+
+            return;
+        }
+
+        game.clear_move(
+            row,
+            col,
+        );
     }
 
-    function isHighlighted(index: number): boolean {
-        if (selectedCell === null) return false;
+    function isHighlighted(
+        index: number,
+    ): boolean {
+        if (selectedCell === null) {
+            return false;
+        }
 
-        const selectedRow = Math.floor(
-            selectedCell / 9,
-        );
+        const selectedRow =
+            Math.floor(
+                selectedCell / 9,
+            );
 
         const selectedCol =
             selectedCell % 9;
 
-        const row = Math.floor(index / 9);
-        const col = index % 9;
+        const row =
+            Math.floor(index / 9);
+
+        const col =
+            index % 9;
 
         if (
             row === selectedRow ||
@@ -268,10 +327,14 @@
         }
 
         const selectedBoxRow =
-            Math.floor(selectedRow / 3);
+            Math.floor(
+                selectedRow / 3,
+            );
 
         const selectedBoxCol =
-            Math.floor(selectedCol / 3);
+            Math.floor(
+                selectedCol / 3,
+            );
 
         const boxRow =
             Math.floor(row / 3);
@@ -285,13 +348,17 @@
         );
     }
 
-    function isSameNumber(index: number): boolean {
+    function isSameNumber(
+        index: number,
+    ): boolean {
         if (selectedCell === null) {
             return false;
         }
 
         const selectedValue =
-            getDisplayedValue(selectedCell);
+            getDisplayedValue(
+                selectedCell,
+            );
 
         if (selectedValue === 0) {
             return false;
@@ -314,16 +381,12 @@
                 {@const serverMove = getServerMove(index)}
 
                 <SudokuCell
-                        value={
-                        incorrectCell === index
-                            ? incorrectValues.get(index) ?? displayedValue
-                            : displayedValue
-                    }
+                        value={displayedValue}
                         given={game.is_given(row, col)}
                         selected={selectedCell === index}
                         highlighted={isHighlighted(index)}
                         sameNumber={isSameNumber(index)}
-                        incorrect={incorrectCell === index}
+                        incorrect={false}
                         locked={
                         !multiplayer &&
                         lockedCells.has(index)
@@ -351,9 +414,17 @@
         {#if !multiplayer}
             <div class="controls">
                 <select bind:value={difficulty}>
-                    <option value={0}>Easy</option>
-                    <option value={1}>Medium</option>
-                    <option value={2}>Hard</option>
+                    <option value={0}>
+                        Easy
+                    </option>
+
+                    <option value={1}>
+                        Medium
+                    </option>
+
+                    <option value={2}>
+                        Hard
+                    </option>
                 </select>
 
                 <button
@@ -387,8 +458,10 @@
 <style>
     .game {
         display: flex;
+
         flex-direction: column;
         align-items: center;
+
         gap: 1rem;
     }
 
@@ -396,31 +469,50 @@
         display: grid;
 
         grid-template-columns:
-            repeat(9, minmax(0, 1fr));
+            repeat(
+                9,
+                minmax(0, 1fr)
+            );
 
         grid-template-rows:
-            repeat(9, minmax(0, 1fr));
+            repeat(
+                9,
+                minmax(0, 1fr)
+            );
 
-        width: min(90vw, 540px);
+        width:
+                min(
+                        90vw,
+                        540px
+                );
 
         aspect-ratio: 1;
     }
 
     .controls {
         display: flex;
+
         gap: 0.75rem;
+
         align-items: center;
     }
 
     select,
     .controls button {
-        padding: 0.6rem 0.9rem;
+        padding:
+                0.6rem
+                0.9rem;
 
         border-radius: 6px;
-        border: 1px solid var(--border);
 
-        background: var(--button-bg);
-        color: var(--button-text);
+        border: 1px solid
+        var(--border);
+
+        background:
+                var(--button-bg);
+
+        color:
+                var(--button-text);
 
         font-size: 0.9rem;
     }
@@ -430,43 +522,23 @@
     }
 
     .controls button:hover {
-        background: var(--button-hover);
+        background:
+                var(--button-hover);
     }
 
     .solved {
         margin: 0;
 
-        color: var(--success);
+        color:
+                var(--success);
 
         font-weight: 600;
-
-        animation: solved-pop 300ms ease-out;
     }
 
     .loading {
         text-align: center;
-        color: var(--text-muted);
-    }
 
-    @keyframes solved-pop {
-        0% {
-            transform: scale(0.9);
-            opacity: 0;
-        }
-
-        70% {
-            transform: scale(1.05);
-            opacity: 1;
-        }
-
-        100% {
-            transform: scale(1);
-        }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-        .solved {
-            animation: none;
-        }
+        color:
+                var(--text-muted);
     }
 </style>
