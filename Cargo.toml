@@ -2,6 +2,5 @@
 
 [workspace]
 members = [
-    "crates/sudoku-engine", "crates/sudoku-wasm"
-]
+    "crates/sudoku-engine", "crates/sudoku-wasm", "crates/sudoku-server"]
 resolver = "3"

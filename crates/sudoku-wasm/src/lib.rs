@@ -18,12 +18,18 @@ pub struct SudokuGame {
     givens: [bool; 81],
     solution: Option<Board>,
 }
+impl Default for SudokuGame {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[wasm_bindgen]
 impl SudokuGame {
     // --------------------------------------------------
     // Constructors
     // --------------------------------------------------
+
 
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
@@ -92,6 +98,60 @@ impl SudokuGame {
 
         Some(Self {
             board: puzzle,
+            givens,
+            solution: Some(solution),
+        })
+    }
+
+
+    #[wasm_bindgen]
+    pub fn from_puzzle(puzzle: Vec<u8>) -> Option<Self> {
+        if puzzle.len() != 81 {
+            return None;
+        }
+
+        let mut board = Board::base();
+
+        for row in 0..9 {
+            for col in 0..9 {
+                board.clear(row, col);
+            }
+        }
+
+        for row in 0..9 {
+            for col in 0..9 {
+                let index = row * 9 + col;
+                let value = puzzle[index];
+
+                if value > 9 {
+                    return None;
+                }
+
+                if value != 0 {
+                    if !board.can_place(row, col, value) {
+                        return None;
+                    }
+
+                    board.set(row, col, value);
+                }
+            }
+        }
+
+        let givens: [bool; 81] = puzzle
+            .iter()
+            .map(|&value| value != 0)
+            .collect::<Vec<_>>()
+            .try_into()
+            .ok()?;
+
+        let mut solution = board.clone();
+
+        if !solve(&mut solution) {
+            return None;
+        }
+
+        Some(Self {
+            board,
             givens,
             solution: Some(solution),
         })

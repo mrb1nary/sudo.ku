@@ -12,7 +12,7 @@ fn board_from_string(puzzle: &str) -> Board {
             let row = index / 9;
             let col = index % 9;
 
-            board.set(row, col, value as u8);
+            board.set(row, col, value);
         }
     }
 

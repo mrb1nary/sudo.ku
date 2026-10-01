@@ -2,9 +2,7 @@ use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use sudoku_engine::board::Board;
-use sudoku_engine::solver::{
-    SolverConfig, profile, solve, solve_with_stats, solve_with_stats_config,
-};
+use sudoku_engine::solver::{solve};
 
 mod common;
 

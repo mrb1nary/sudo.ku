@@ -1,5 +1,5 @@
 use sudoku_engine::board::Board;
-use sudoku_engine::solver::{SolverConfig, solve, solve_with_stats, solve_with_stats_config};
+use sudoku_engine::solver::{SolverConfig,solve_with_stats, solve_with_stats_config};
 fn board_from_string(puzzle: &str) -> Board {
     let puzzle: String = puzzle.chars().filter(|c| !c.is_whitespace()).collect();
 

@@ -7,6 +7,7 @@
       <sourceFolder url="file://$MODULE_DIR$/crates/sudoku-engine/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/crates/sudoku-engine/examples" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/sudoku-wasm/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/sudoku-server/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/crates/sudoku-engine/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>

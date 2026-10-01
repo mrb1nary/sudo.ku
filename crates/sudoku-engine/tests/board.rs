@@ -1,5 +1,4 @@
 mod tests {
-    use super::*;
     use rand::{RngExt, rng};
     use sudoku_engine::board::Board;
 
