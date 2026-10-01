@@ -376,8 +376,7 @@
         <h1>sudo.ku</h1>
 
         <p class="subtitle">
-          A fast, focused
-          Sudoku experience.
+            🦇 made by mrb1nary 🦇
         </p>
       </div>
     </section>
@@ -699,7 +698,7 @@
 
     color: var(--text-muted);
 
-    font-size: 0.9rem;
+    font-size: 1.5rem;
   }
 
   .game-shell {
