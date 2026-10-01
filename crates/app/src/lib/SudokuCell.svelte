@@ -6,6 +6,7 @@
         highlighted: boolean;
         sameNumber: boolean;
         incorrect: boolean;
+        correct: boolean;
         locked: boolean;
         serverFilled: boolean;
         playerId?: number | null;
@@ -19,6 +20,7 @@
         highlighted,
         sameNumber,
         incorrect,
+        correct,
         locked,
         serverFilled,
         playerId = null,
@@ -27,18 +29,19 @@
 </script>
 
 <button
-        class="cell"
-        class:selected
-        class:given
-        class:highlighted
-        class:same-number={sameNumber}
-        class:incorrect
-        class:locked
-        class:server-filled={serverFilled}
-        class:player-one={serverFilled && playerId === 1}
-        class:player-two={serverFilled && playerId === 2}
-        type="button"
-        {onclick}
+    class="cell"
+    class:selected
+    class:given
+    class:highlighted
+    class:same-number={sameNumber}
+    class:incorrect
+    class:correct
+    class:locked
+    class:server-filled={serverFilled}
+    class:player-one={serverFilled && playerId === 1}
+    class:player-two={serverFilled && playerId === 2}
+    type="button"
+    {onclick}
 >
     <span class="cell-value">
         {value === 0 ? "" : value}
@@ -55,6 +58,7 @@
 
         width: 100%;
         height: 100%;
+
         min-width: 0;
         min-height: 0;
 
@@ -71,10 +75,10 @@
         cursor: pointer;
 
         transition:
-                background-color 140ms ease,
-                color 140ms ease,
-                box-shadow 140ms ease,
-                transform 100ms ease;
+            background-color 120ms ease,
+            color 120ms ease,
+            box-shadow 120ms ease,
+            transform 120ms ease;
     }
 
     .cell-value {
@@ -107,12 +111,12 @@
         background: var(--cell-selected);
 
         box-shadow:
-                inset 0 0 0 2px var(--accent),
-                0 0 0 1px color-mix(
-                        in srgb,
-                        var(--accent) 35%,
-                        transparent
-                );
+            inset 0 0 0 2px var(--accent),
+            0 0 0 1px color-mix(
+                in srgb,
+                var(--accent) 35%,
+                transparent
+            );
     }
 
     .cell.selected:hover {
@@ -124,16 +128,9 @@
         font-weight: 750;
     }
 
-    /*
-     * A successful player move gets a tiny pop when it
-     * becomes locked on the board.
-     */
-    .cell.locked .cell-value {
-        animation: number-enter 180ms ease-out;
-    }
-
-    .cell.server-filled .cell-value {
-        animation: number-enter 180ms ease-out;
+    .cell.correct .cell-value {
+        color: var(--success);
+        font-weight: 750;
     }
 
     .cell.server-filled.player-one .cell-value {
@@ -146,73 +143,84 @@
         font-weight: 750;
     }
 
-    .cell.server-filled:not(.player-one):not(.player-two) .cell-value,
-    .cell.locked .cell-value {
+    .cell.server-filled:not(.player-one):not(.player-two)
+        .cell-value {
         color: var(--player-text);
         font-weight: 700;
     }
 
     .cell.locked {
-        color: var(--player-text);
-        font-weight: 700;
         cursor: default;
     }
 
     /*
      * Wrong answer feedback.
      *
-     * The class is intentionally animation-driven rather than
-     * permanently changing the cell background.
+     * This animation belongs here because .cell is rendered
+     * by SudokuCell.svelte. Putting the keyframes/class in
+     * SudokuBoard.svelte does not style this child component's
+     * scoped DOM.
      */
     .cell.incorrect {
-        z-index: 4;
-
         color: var(--error);
+        font-weight: 700;
 
-        background:
-                color-mix(
-                        in srgb,
-                        var(--error) 12%,
-                        var(--cell-bg)
-                );
-
-        border-color:
-                color-mix(
-                        in srgb,
-                        var(--error) 55%,
-                        var(--border)
-                );
-
-        box-shadow:
-                inset 0 0 0 2px
-                color-mix(
-                        in srgb,
-                        var(--error) 55%,
-                        transparent
-                ),
-                0 0 14px
-                color-mix(
-                        in srgb,
-                        var(--error) 25%,
-                        transparent
-                );
-
-        animation: wrong-answer 360ms ease-out;
+        animation:
+            incorrect-shake 180ms ease-in-out,
+            incorrect-glow 450ms ease-out;
     }
 
     .cell.incorrect .cell-value {
         color: var(--error);
-
         font-weight: 750;
-
-        animation: wrong-number 360ms ease-out;
     }
 
-    .cell.selected.server-filled.player-one .cell-value {
+    @keyframes incorrect-shake {
+        0%,
+        100% {
+            transform: translateX(0);
+        }
+
+        25% {
+            transform: translateX(-3px);
+        }
+
+        50% {
+            transform: translateX(0);
+        }
+
+        75% {
+            transform: translateX(3px);
+        }
+    }
+
+    @keyframes incorrect-glow {
+        0% {
+            box-shadow:
+                inset 0 0 0 2px var(--error),
+                0 0 14px var(--error);
+        }
+
+        60% {
+            box-shadow:
+                inset 0 0 0 2px var(--error),
+                0 0 10px var(--error);
+        }
+
+        100% {
+            box-shadow:
+                inset 0 0 0 0 transparent,
+                0 0 0 transparent;
+        }
+    }
+
+    .cell.selected.server-filled.player-one
+        .cell-value {
         color: #60a5fa;
     }
 
-    .cell.selected.server-filled.player-two .cell-value {
+    .cell.selected.server-filled.player-two
+        .cell-value {
         color: #fb923c;
     }
 
@@ -238,74 +246,5 @@
     .cell:nth-child(n + 28):nth-child(-n + 36),
     .cell:nth-child(n + 55):nth-child(-n + 63) {
         border-top: 2px solid var(--border-strong);
-    }
-
-    @keyframes wrong-answer {
-        0% {
-            transform: translateX(0);
-        }
-
-        15% {
-            transform: translateX(-5px);
-        }
-
-        30% {
-            transform: translateX(5px);
-        }
-
-        45% {
-            transform: translateX(-4px);
-        }
-
-        60% {
-            transform: translateX(4px);
-        }
-
-        75% {
-            transform: translateX(-2px);
-        }
-
-        100% {
-            transform: translateX(0);
-        }
-    }
-
-    @keyframes wrong-number {
-        0% {
-            transform: scale(1);
-        }
-
-        35% {
-            transform: scale(1.16);
-        }
-
-        100% {
-            transform: scale(1);
-        }
-    }
-
-    @keyframes number-enter {
-        0% {
-            transform: scale(0.72);
-            opacity: 0.35;
-        }
-
-        65% {
-            transform: scale(1.08);
-            opacity: 1;
-        }
-
-        100% {
-            transform: scale(1);
-        }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-        .cell,
-        .cell-value {
-            animation: none !important;
-
-            transition: none;
-        }
     }
 </style>
