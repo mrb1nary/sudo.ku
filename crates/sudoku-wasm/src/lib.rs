@@ -14,48 +14,54 @@ use sudoku_engine::{
 
 #[wasm_bindgen]
 pub struct SudokuGame {
-    #[wasm_bindgen(skip)]
     board: Board,
-
-    #[wasm_bindgen(skip)]
     givens: [bool; 81],
+    solution: Option<Board>,
 }
 
 #[wasm_bindgen]
 impl SudokuGame {
     // --------------------------------------------------
-    // Construction
+    // Constructors
     // --------------------------------------------------
 
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
+        let mut board = Board::base();
+
+        for row in 0..9 {
+            for col in 0..9 {
+                board.clear(row, col);
+            }
+        }
+
         Self {
-            board: Board::empty(),
+            board,
             givens: [false; 81],
+            solution: None,
         }
     }
 
     pub fn base() -> Self {
+        let board = Board::base();
+
         Self {
-            board: Board::base(),
+            board: board.clone(),
             givens: [true; 81],
+            solution: Some(board),
         }
     }
 
     pub fn random() -> Self {
+        let board = Board::random();
+
         Self {
-            board: Board::random(),
+            board: board.clone(),
             givens: [true; 81],
+            solution: Some(board),
         }
     }
 
-    /// Generate a Sudoku puzzle by difficulty.
-    ///
-    /// 0 = Easy
-    /// 1 = Medium
-    /// 2 = Hard
-    ///
-    /// Returns None for an invalid difficulty or if generation fails.
     pub fn generate(difficulty: u8) -> Option<Self> {
         let difficulty = match difficulty {
             0 => Difficulty::Easy,
@@ -64,97 +70,44 @@ impl SudokuGame {
             _ => return None,
         };
 
-        let board = generate_with_difficulty(difficulty)?;
+        let puzzle = generate_with_difficulty(difficulty)?;
+
+        // The generated puzzle is guaranteed to have a solution,
+        // but solve a clone so that the original puzzle remains intact.
+        let mut solution = puzzle.clone();
+
+        if !solve(&mut solution) {
+            return None;
+        }
 
         let mut givens = [false; 81];
 
         for row in 0..9 {
             for col in 0..9 {
-                givens[row * 9 + col] = !board.is_empty(row, col);
-            }
-        }
-
-        Some(Self { board, givens })
-    }
-
-    // --------------------------------------------------
-    // Cell access
-    // --------------------------------------------------
-
-    pub fn get_cell(&self, row: usize, col: usize) -> u8 {
-        self.board.get(row, col)
-    }
-
-    pub fn set_cell(&mut self, row: usize, col: usize, value: u8) {
-        self.board.set(row, col, value);
-    }
-
-    pub fn clear_cell(&mut self, row: usize, col: usize) {
-        self.board.clear(row, col);
-    }
-
-    pub fn is_empty(&self, row: usize, col: usize) -> bool {
-        self.board.is_empty(row, col)
-    }
-
-    // --------------------------------------------------
-    // Game state
-    // --------------------------------------------------
-
-    pub fn is_given(&self, row: usize, col: usize) -> bool {
-        self.givens[row * 9 + col]
-    }
-
-    pub fn make_move(&mut self, row: usize, col: usize, value: u8) -> bool {
-        let index = row * 9 + col;
-
-        // Given cells cannot be changed.
-        if self.givens[index] {
-            return false;
-        }
-
-        // Only Sudoku digits are valid moves.
-        if !(1..=9).contains(&value) {
-            return false;
-        }
-
-        // The move must obey Sudoku rules.
-        if !self.board.can_place(row, col, value) {
-            return false;
-        }
-
-        self.board.set(row, col, value);
-
-        true
-    }
-
-    pub fn clear_move(&mut self, row: usize, col: usize) -> bool {
-        let index = row * 9 + col;
-
-        // Given cells cannot be cleared.
-        if self.givens[index] {
-            return false;
-        }
-
-        self.board.clear(row, col);
-
-        true
-    }
-
-    /// Clear all user-entered values while preserving the original puzzle.
-    pub fn reset(&mut self) {
-        for row in 0..9 {
-            for col in 0..9 {
-                if !self.givens[row * 9 + col] {
-                    self.board.clear(row, col);
+                if puzzle.get(row, col) != 0 {
+                    givens[row * 9 + col] = true;
                 }
             }
         }
+
+        Some(Self {
+            board: puzzle,
+            givens,
+            solution: Some(solution),
+        })
     }
 
     // --------------------------------------------------
     // Board access
     // --------------------------------------------------
+
+    pub fn get_cell(&self, row: usize, col: usize) -> u8 {
+        if row >= 9 || col >= 9 {
+            return 0;
+        }
+
+        self.board.get(row, col)
+    }
 
     pub fn get_board(&self) -> Vec<u8> {
         let mut cells = Vec::with_capacity(81);
@@ -168,11 +121,131 @@ impl SudokuGame {
         cells
     }
 
+    pub fn is_empty(&self, row: usize, col: usize) -> bool {
+        if row >= 9 || col >= 9 {
+            return false;
+        }
+
+        self.board.is_empty(row, col)
+    }
+
+    pub fn is_given(&self, row: usize, col: usize) -> bool {
+        if row >= 9 || col >= 9 {
+            return false;
+        }
+
+        self.givens[row * 9 + col]
+    }
+
     // --------------------------------------------------
-    // Validation
+    // Gameplay
+    // --------------------------------------------------
+
+    pub fn make_move(&mut self, row: usize, col: usize, value: u8) -> bool {
+        if row >= 9 || col >= 9 {
+            return false;
+        }
+
+        if self.is_given(row, col) {
+            return false;
+        }
+
+        if !(1..=9).contains(&value) {
+            return false;
+        }
+
+        let Some(solution) = &self.solution else {
+            return false;
+        };
+
+        // Only allow the correct solution value.
+        if solution.get(row, col) != value {
+            return false;
+        }
+
+        // Keep the normal Sudoku legality check as well.
+        if !self.board.can_place(row, col, value) {
+            return false;
+        }
+
+        self.board.set(row, col, value);
+
+        true
+    }
+
+    pub fn clear_move(&mut self, row: usize, col: usize) -> bool {
+        if row >= 9 || col >= 9 {
+            return false;
+        }
+
+        if self.is_given(row, col) {
+            return false;
+        }
+
+        if self.board.is_empty(row, col) {
+            return false;
+        }
+
+        self.board.clear(row, col);
+
+        true
+    }
+
+    pub fn reset(&mut self) {
+        for row in 0..9 {
+            for col in 0..9 {
+                if !self.givens[row * 9 + col] {
+                    self.board.clear(row, col);
+                }
+            }
+        }
+    }
+
+    // --------------------------------------------------
+    // Game state
+    // --------------------------------------------------
+
+    pub fn is_complete(&self) -> bool {
+        self.board.find_empty().is_none()
+    }
+
+    pub fn is_solved(&self) -> bool {
+        let Some(solution) = &self.solution else {
+            return false;
+        };
+
+        for row in 0..9 {
+            for col in 0..9 {
+                if self.board.get(row, col) != solution.get(row, col) {
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
+
+    pub fn is_correct(&self, row: usize, col: usize, value: u8) -> bool {
+        if row >= 9 || col >= 9 {
+            return false;
+        }
+
+        let Some(solution) = &self.solution else {
+            return false;
+        };
+
+        solution.get(row, col) == value
+    }
+
+    // --------------------------------------------------
+    // Sudoku helpers
     // --------------------------------------------------
 
     pub fn can_place(&self, row: usize, col: usize, value: u8) -> bool {
+        if row >= 9 || col >= 9 {
+            return false;
+        }
+
         if !(1..=9).contains(&value) {
             return false;
         }
@@ -180,35 +253,10 @@ impl SudokuGame {
         self.board.can_place(row, col, value)
     }
 
-    pub fn find_empty(&self) -> Vec<usize> {
-        match self.board.find_empty() {
-            Some((row, col)) => vec![row, col],
-            None => Vec::new(),
-        }
-    }
-
-    // --------------------------------------------------
-    // Board transformations
-    // --------------------------------------------------
-
-    pub fn swap_digits(&mut self, a: u8, b: u8) {
-        self.board.swap_digits(a, b);
-    }
-
-    pub fn swap_rows(&mut self, row_a: usize, row_b: usize) {
-        self.board.swap_rows(row_a, row_b);
-    }
-
-    pub fn swap_columns(&mut self, col_a: usize, col_b: usize) {
-        self.board.swap_columns(col_a, col_b);
-    }
-
-    pub fn swap_bands(&mut self, band_a: usize, band_b: usize) {
-        self.board.swap_bands(band_a, band_b);
-    }
-
-    pub fn swap_stacks(&mut self, stack_a: usize, stack_b: usize) {
-        self.board.swap_stacks(stack_a, stack_b);
+    pub fn find_empty(&self) -> Option<Vec<usize>> {
+        self.board
+            .find_empty()
+            .map(|(row, col)| vec![row, col])
     }
 
     // --------------------------------------------------
@@ -219,7 +267,10 @@ impl SudokuGame {
         solve(&mut self.board)
     }
 
-    pub fn solve_with_config(&mut self, use_hidden_singles: bool) -> bool {
+    pub fn solve_with_config(
+        &mut self,
+        use_hidden_singles: bool,
+    ) -> bool {
         let config = SolverConfig {
             use_hidden_singles,
         };
@@ -227,35 +278,36 @@ impl SudokuGame {
         solve_with_config(&mut self.board, config)
     }
 
-    pub fn solve_with_stats(&mut self) -> Vec<u32> {
-        let stats = solve_with_stats_config(
-            &mut self.board,
-            SolverConfig::default(),
-        );
+    pub fn solve_with_stats(&mut self) -> Vec<usize> {
+        let config = SolverConfig {
+            use_hidden_singles: true,
+        };
 
-        stats_to_vec(stats)
+        let stats = solve_with_stats_config(&mut self.board, config);
+
+        Self::stats_to_vec(&stats)
     }
 
     pub fn solve_with_stats_config(
         &mut self,
         use_hidden_singles: bool,
-    ) -> Vec<u32> {
+    ) -> Vec<usize> {
         let config = SolverConfig {
             use_hidden_singles,
         };
 
         let stats = solve_with_stats_config(&mut self.board, config);
 
-        stats_to_vec(stats)
+        Self::stats_to_vec(&stats)
     }
-}
 
-fn stats_to_vec(stats: SolverStats) -> Vec<u32> {
-    vec![
-        stats.recursive_calls as u32,
-        stats.forced_moves as u32,
-        stats.hidden_singles as u32,
-        stats.branches as u32,
-        stats.backtracks as u32,
-    ]
+    fn stats_to_vec(stats: &SolverStats) -> Vec<usize> {
+        vec![
+            stats.recursive_calls,
+            stats.forced_moves,
+            stats.hidden_singles,
+            stats.branches,
+            stats.backtracks,
+        ]
+    }
 }

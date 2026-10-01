@@ -64,6 +64,7 @@
         }
 
         .cell {
+            position: relative;
             border: 0;
             border-radius: 0;
             padding: 0;
@@ -76,22 +77,52 @@
             cursor: pointer;
         }
 
+        /* Selected cell */
+        .cell.selected {
+            background: #cfd8dc;
+        }
+
+        /* Same row / column / box */
+        .cell.related {
+            background: #eeeeee;
+        }
+
+        /* Same number as selected cell */
+        .cell.same-number {
+            background: #d6e4ff;
+            font-weight: 600;
+        }
+
+        /* Selected cell takes precedence */
+        .cell.selected {
+            background: #b8c7d1;
+        }
+
+        /* Given numbers */
         .cell.given {
             font-weight: 700;
         }
 
-        .cell.selected {
-            outline: 3px solid #555;
-            outline-offset: -3px;
+        /* Player-entered numbers */
+        .cell:not(.given) {
+            font-weight: 500;
         }
 
+        /*
+         * 3x3 box boundaries
+         */
+
         .cell:nth-child(3n) {
-            margin-right: 2px;
+            border-right: 2px solid #222;
+        }
+
+        .cell:nth-child(9n) {
+            border-right: 0;
         }
 
         .cell:nth-child(n+19):nth-child(-n+27),
         .cell:nth-child(n+46):nth-child(-n+54) {
-            margin-bottom: 2px;
+            border-bottom: 2px solid #222;
         }
 
         .numbers {
@@ -179,7 +210,9 @@
 
     await init();
 
-    const boardElement = document.getElementById("board");
+    const boardElement =
+        document.getElementById("board");
+
     const difficultyElement =
         document.getElementById("difficulty");
 
@@ -199,6 +232,7 @@
         document.getElementById("status");
 
     let game = null;
+
     let selectedRow = null;
     let selectedCol = null;
 
@@ -207,15 +241,20 @@
 
         for (let row = 0; row < 9; row++) {
             for (let col = 0; col < 9; col++) {
-                const cell = document.createElement("button");
+                const cell =
+                    document.createElement("button");
 
                 cell.className = "cell";
+
                 cell.dataset.row = row;
                 cell.dataset.col = col;
 
-                cell.addEventListener("click", () => {
-                    selectCell(row, col);
-                });
+                cell.addEventListener(
+                    "click",
+                    () => {
+                        selectCell(row, col);
+                    }
+                );
 
                 boardElement.appendChild(cell);
             }
@@ -225,22 +264,78 @@
     function renderBoard() {
         const cells = boardElement.children;
 
+        let selectedValue = 0;
+
+        if (
+            selectedRow !== null &&
+            selectedCol !== null
+        ) {
+            selectedValue =
+                game.get_cell(
+                    selectedRow,
+                    selectedCol
+                );
+        }
+
         for (let row = 0; row < 9; row++) {
             for (let col = 0; col < 9; col++) {
                 const index = row * 9 + col;
+
                 const cell = cells[index];
 
-                const value = game.get_cell(row, col);
-                const given = game.is_given(row, col);
+                const value =
+                    game.get_cell(row, col);
 
-                cell.textContent = value === 0 ? "" : value;
+                const given =
+                    game.is_given(row, col);
 
-                cell.classList.toggle("given", given);
+                const isSelected =
+                    row === selectedRow &&
+                    col === selectedCol;
+
+                const sameRow =
+                    row === selectedRow;
+
+                const sameColumn =
+                    col === selectedCol;
+
+                const sameBox =
+                    selectedRow !== null &&
+                    selectedCol !== null &&
+                    Math.floor(row / 3) ===
+                    Math.floor(selectedRow / 3) &&
+                    Math.floor(col / 3) ===
+                    Math.floor(selectedCol / 3);
+
+                const sameNumber =
+                    selectedValue !== 0 &&
+                    value === selectedValue;
+
+                cell.textContent =
+                    value === 0 ? "" : value;
+
+                cell.classList.toggle(
+                    "given",
+                    given
+                );
 
                 cell.classList.toggle(
                     "selected",
-                    row === selectedRow &&
-                    col === selectedCol
+                    isSelected
+                );
+
+                cell.classList.toggle(
+                    "related",
+                    !isSelected &&
+                    (sameRow ||
+                        sameColumn ||
+                        sameBox)
+                );
+
+                cell.classList.toggle(
+                    "same-number",
+                    !isSelected &&
+                    sameNumber
                 );
             }
         }
@@ -250,13 +345,14 @@
         selectedRow = row;
         selectedCol = col;
 
-        renderBoard();
-
         if (game.is_given(row, col)) {
-            statusElement.textContent = "Given cell";
+            statusElement.textContent =
+                "Given cell";
         } else {
             statusElement.textContent = "";
         }
+
+        renderBoard();
     }
 
     function makeMove(value) {
@@ -282,11 +378,12 @@
             return;
         }
 
-        const success = game.make_move(
-            selectedRow,
-            selectedCol,
-            value
-        );
+        const success =
+            game.make_move(
+                selectedRow,
+                selectedCol,
+                value
+            );
 
         if (!success) {
             statusElement.textContent =
@@ -308,10 +405,11 @@
             return;
         }
 
-        const success = game.clear_move(
-            selectedRow,
-            selectedCol
-        );
+        const success =
+            game.clear_move(
+                selectedRow,
+                selectedCol
+            );
 
         if (!success) {
             statusElement.textContent =
@@ -366,9 +464,10 @@
         selectedRow = null;
         selectedCol = null;
 
-        statusElement.textContent = solved
-            ? "Solved"
-            : "Unable to solve";
+        statusElement.textContent =
+            solved
+                ? "Solved"
+                : "Unable to solve";
 
         renderBoard();
     }
@@ -376,12 +475,17 @@
     document
         .querySelectorAll(".number")
         .forEach((button) => {
-            button.addEventListener("click", () => {
-                const value =
-                    Number(button.dataset.value);
+            button.addEventListener(
+                "click",
+                () => {
+                    const value =
+                        Number(
+                            button.dataset.value
+                        );
 
-                makeMove(value);
-            });
+                    makeMove(value);
+                }
+            );
         });
 
     newGameButton.addEventListener(
@@ -411,7 +515,9 @@
                 event.key >= "1" &&
                 event.key <= "9"
             ) {
-                makeMove(Number(event.key));
+                makeMove(
+                    Number(event.key)
+                );
             }
 
             if (
