@@ -85,7 +85,6 @@
         }
 
         incorrectValues = nextIncorrect;
-        boardVersion += 1;
     });
 
     onMount(async () => {
@@ -178,7 +177,7 @@
         lockedCells = new Set<number>();
         incorrectValues = new Map();
 
-        boardVersion += 1;
+
     }
 
     function getServerMove(
@@ -355,7 +354,7 @@
          * so explicitly invalidate the board render.
          */
         game.clear_move(row, col);
-        boardVersion += 1;
+
     }
 
     function isHighlighted(index: number): boolean {
