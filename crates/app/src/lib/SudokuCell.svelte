@@ -7,6 +7,7 @@
         highlighted: boolean;
         sameNumber: boolean;
         incorrect: boolean;
+        correct: boolean;
         locked: boolean;
         serverFilled: boolean;
         playerId?: number | null;
@@ -21,6 +22,7 @@
         highlighted,
         sameNumber,
         incorrect,
+        correct,
         locked,
         serverFilled,
         playerId = null,
@@ -35,6 +37,7 @@
     class:highlighted
     class:same-number={sameNumber}
     class:incorrect
+    class:correct
     class:locked
     class:server-filled={serverFilled}
     class:player-one={serverFilled && playerId === 1}
@@ -194,17 +197,17 @@
             );
     }
 
+    .cell.correct .cell-value {
+        color: var(--success);
+        font-weight: 750;
+    }
+
     .cell.selected:hover {
         background: var(--cell-selected);
     }
 
     .cell.given {
-        color: var(--given-text);
-        font-weight: 750;
-    }
-
-    .cell.correct .cell-value {
-        color: var(--success);
+        color: var(--text);
         font-weight: 750;
     }
 
@@ -218,7 +221,25 @@
         font-weight: 750;
     }
 
-    .cell.server-filled:not(.player-one):not(.player-two)
+    /* Given cells are always white */
+    .cell.given .cell-value {
+        color: #ffffff !important;
+        font-weight: 750;
+    }
+
+
+
+    .cell.server-filled.player-one .cell-value {
+        color: #60a5fa;
+        font-weight: 750;
+    }
+
+    .cell.server-filled.player-two .cell-value {
+        color: #fb923c;
+        font-weight: 750;
+    }
+
+    .cell.server-filled:not(.player-one):not(.player-two),
         .cell-value {
         color: var(--player-text);
         font-weight: 700;
@@ -289,12 +310,12 @@
         }
     }
 
-    .cell.selected.server-filled.player-one
+    .cell.selected.server-filled.player-one,
         .cell-value {
         color: #60a5fa;
     }
 
-    .cell.selected.server-filled.player-two
+    .cell.selected.server-filled.player-two,
         .cell-value {
         color: #fb923c;
     }

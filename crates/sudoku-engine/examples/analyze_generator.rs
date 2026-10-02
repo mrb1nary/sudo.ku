@@ -1,7 +1,7 @@
 use sudoku_engine::{
     board::Board,
     generator::generate,
-    solver::{SolverConfig, solve_with_stats, solve_with_stats_config},
+    solver::{solve_with_stats, solve_with_stats_config, SolverConfig},
 };
 
 fn count_clues(board: &Board) -> usize {
@@ -44,6 +44,7 @@ fn main() {
             &mut without_hidden,
             SolverConfig {
                 use_hidden_singles: false,
+                ..SolverConfig::default()
             },
         );
 
@@ -88,6 +89,7 @@ fn print_percentiles(name: &str, values: &[usize]) {
     println!("  P99  = {}", percentile(values, 0.99));
     println!("  P100 = {}", percentile(values, 1.00));
 }
+
 fn print_stats(name: &str, values: &[usize]) {
     let min = *values.iter().min().unwrap();
     let max = *values.iter().max().unwrap();

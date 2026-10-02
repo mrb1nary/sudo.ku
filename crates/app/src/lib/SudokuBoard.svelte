@@ -17,6 +17,7 @@
         serverMoves?: Map<number, ServerMove>;
         rejectedCell?: number | null;
         rejectedValue?: number | null;
+        playerSlot?: number | null;
         onMove?: (row: number, col: number, value: number) => void;
         onClear?: (row: number, col: number) => void;
     }
@@ -28,6 +29,7 @@
         serverMoves = new Map(),
         rejectedCell = null,
         rejectedValue = null,
+        playerSlot = null,
         onMove,
         onClear,
     }: Props = $props();
@@ -52,7 +54,13 @@
     let notesEnabled = $state(false);
     let notes = $state(new Map<number, Set<number>>());
     let incorrectTimers = new Map<number, number>();
-    let optimisticMoves = new Map<number, number>();
+    let optimisticMoves = new Map<
+        number,
+        {
+            value: number;
+            playerSlot: number;
+        }
+    >();
     let remaining = $state<number[]>([9, 9, 9, 9, 9, 9, 9, 9, 9]);
 
     /*
@@ -283,10 +291,10 @@
             return serverMove.value;
         }
 
-        const optimisticValue = optimisticMoves.get(index);
+        const optimisticMove = optimisticMoves.get(index);
 
-        if (optimisticValue !== undefined) {
-            return optimisticValue;
+        if (optimisticMove !== undefined) {
+            return optimisticMove.value;
         }
 
         const row = Math.floor(index / 9);
@@ -317,15 +325,10 @@
     function selectCell(index: number) {
         if (!game || solved) return;
 
-        // const row = Math.floor(index / 9);
-        // const col = index % 9;
-
         if (multiplayer) {
             selectedCell = index;
             return;
         }
-
-        if (lockedCells.has(index)) return;
 
         selectedCell = index;
     }
@@ -416,7 +419,10 @@
             notes.delete(cell);
             notes = new Map(notes);
 
-            optimisticMoves.set(cell, value);
+            optimisticMoves.set(cell, {
+                value,
+                playerSlot: playerSlot ?? 1,
+            });
             boardVersion += 1;
 
             onMove?.(row, col, value);
@@ -583,32 +589,32 @@
                     {@const displayedValue = getDisplayedValue(index)}
                     {@const serverMove = getServerMove(index)}
                     {@const incorrectValue = incorrectValues.get(index)}
+                    {@const cellNotes = notes.get(index) ?? new Set()}
+                    {@const optimisticMove = optimisticMoves.get(index)}
 
                     <SudokuCell
                             value={displayedValue}
-                            notes={[...(notes.get(index) ?? new Set<number>())]}
+                            notes={[...cellNotes]}
                             given={game.is_given(row, col)}
                             selected={selectedCell === index}
                             highlighted={isHighlighted(index)}
                             sameNumber={isSameNumber(index)}
-                            incorrect={
-                            incorrectValue !== undefined
-
-                        }
-                            correct={
-                            !multiplayer &&
-                            lockedCells.has(index)
-                        }
-                            locked={
-                            !multiplayer &&
-                            lockedCells.has(index)
-                        }
+                            incorrect={incorrectValue !== undefined}
+                            correct={!multiplayer && lockedCells.has(index)}
+                            locked={!multiplayer && lockedCells.has(index)}
                             serverFilled={
-                            multiplayer &&
-                            !game.is_given(row, col) &&
-                            serverMove !== undefined
-                        }
-                            playerId={serverMove?.playerSlot}
+                                multiplayer &&
+                                !game.is_given(row, col) &&
+                                (
+                                    serverMove !== undefined ||
+                                    optimisticMove !== undefined
+                                )
+                                }
+                            playerId={
+                                serverMove?.playerSlot ??
+                                optimisticMove?.playerSlot ??
+                                null
+                            }
                             onclick={() => selectCell(index)}
                     />
                 {/each}

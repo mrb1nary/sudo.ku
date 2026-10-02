@@ -1,5 +1,5 @@
 use sudoku_engine::generator::{generate, generate_with_difficulty};
-use sudoku_engine::solver::{count_solutions, profile, Difficulty};
+use sudoku_engine::solver::{count_solutions, profile, Difficulty, Technique};
 
 #[test]
 fn generator_can_target_all_difficulties() {
@@ -18,7 +18,7 @@ fn generator_can_target_all_difficulties() {
         let mut board = puzzle.clone();
         let stats = profile(&mut board);
 
-        assert_eq!(stats.difficulty(), difficulty);
+        assert_eq!(stats.difficulty(), Some(difficulty));
 
         println!(
             "\nGenerated {:?} puzzle:\n{}\n\
@@ -47,6 +47,7 @@ fn generated_puzzle_has_one_solution() {
 
 #[test]
 fn generated_puzzle_has_valid_clue_count() {
+
     let puzzle = generate();
 
     let mut clues = 0;
@@ -63,4 +64,30 @@ fn generated_puzzle_has_valid_clue_count() {
 
     assert!(clues > 0);
     assert!(clues < 81);
+}
+
+#[test]
+fn inspect_generated_difficulty_distribution() {
+    println!("Hola");
+    for i in 1..=10 {
+        let start = std::time::Instant::now();
+
+        let puzzle = generate();
+
+        let generation_time = start.elapsed();
+
+        let mut board = puzzle.clone();
+        let profile_start = std::time::Instant::now();
+
+        let stats = profile(&mut board);
+
+        let profile_time = profile_start.elapsed();
+
+        println!(
+            "Puzzle #{i}: generation={:?}, profile={:?}, difficulty={:?}",
+            generation_time,
+            profile_time,
+            stats.difficulty(),
+        );
+    }
 }

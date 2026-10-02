@@ -253,14 +253,15 @@
 
             <div class="board-wrapper">
                 <SudokuBoard
-                    externalGame={game}
-                    multiplayer={true}
-                    syncVersion={syncVersion}
-                    serverMoves={serverMoves}
-                    rejectedCell={rejectedCell}
-                    rejectedValue={rejectedValue}
-                    onMove={onMove}
-                    onClear={onClear}
+                        externalGame={game}
+                        multiplayer={true}
+                        syncVersion={syncVersion}
+                        serverMoves={serverMoves}
+                        rejectedCell={rejectedCell}
+                        rejectedValue={rejectedValue}
+                        playerSlot={yourPlayerId === playerOneId ? 1 : yourPlayerId === playerTwoId ? 2 : null}
+                        onMove={onMove}
+                        onClear={onClear}
                 />
             </div>
         </main>

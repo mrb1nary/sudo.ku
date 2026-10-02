@@ -1,8 +1,8 @@
 use std::hint::black_box;
 
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{criterion_group, criterion_main, Criterion};
 use sudoku_engine::board::Board;
-use sudoku_engine::solver::{solve};
+use sudoku_engine::solver::solve;
 
 mod common;
 
@@ -29,6 +29,7 @@ fn analyze_puzzles(name: &str, puzzles: &[Board]) {
             &mut without_hidden,
             sudoku_engine::solver::SolverConfig {
                 use_hidden_singles: false,
+                ..sudoku_engine::solver::SolverConfig::default()
             },
         );
 
@@ -55,6 +56,7 @@ fn analyze_puzzles(name: &str, puzzles: &[Board]) {
         );
     }
 }
+
 fn benchmark_solver(c: &mut Criterion) {
     let easy = easy_puzzles();
     let medium = medium_puzzles();

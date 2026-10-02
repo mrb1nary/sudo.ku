@@ -2,7 +2,11 @@ mod common;
 
 use common::puzzles::{easy_puzzles, hard_puzzles, medium_puzzles};
 
-use sudoku_engine::solver::{SolverConfig, solve_with_stats, solve_with_stats_config};
+use sudoku_engine::solver::{
+    solve_with_stats,
+    solve_with_stats_config,
+    SolverConfig,
+};
 
 fn analyze_group(name: &str, puzzles: Vec<sudoku_engine::board::Board>) {
     println!("\n{name} puzzles:");
@@ -17,6 +21,7 @@ fn analyze_group(name: &str, puzzles: Vec<sudoku_engine::board::Board>) {
             &mut without_hidden,
             SolverConfig {
                 use_hidden_singles: false,
+                ..SolverConfig::default()
             },
         );
 

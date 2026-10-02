@@ -1,5 +1,6 @@
 use sudoku_engine::board::Board;
-use sudoku_engine::solver::{SolverConfig,solve_with_stats, solve_with_stats_config};
+use sudoku_engine::solver::{solve_with_difficulty, solve_with_stats, solve_with_stats_config, Difficulty, SolverConfig};
+
 fn board_from_string(puzzle: &str) -> Board {
     let puzzle: String = puzzle.chars().filter(|c| !c.is_whitespace()).collect();
 
@@ -65,7 +66,12 @@ fn assert_valid_solution(board: &Board) {
         for row in 0..9 {
             let value = board.get(row, col) as usize;
 
-            assert!(!seen[value], "duplicate {} in column {}", value, col + 1);
+            assert!(
+                !seen[value],
+                "duplicate {} in column {}",
+                value,
+                col + 1
+            );
 
             seen[value] = true;
         }
@@ -85,7 +91,9 @@ fn assert_valid_solution(board: &Board) {
                     assert!(
                         !seen[value],
                         "duplicate {} in box ({}, {})",
-                        value, box_row, box_col
+                        value,
+                        box_row,
+                        box_col
                     );
 
                     seen[value] = true;
@@ -96,7 +104,6 @@ fn assert_valid_solution(board: &Board) {
         }
     }
 }
-
 
 #[test]
 fn inspect_solver_stats() {
@@ -143,7 +150,6 @@ fn inspect_solver_stats() {
     );
 }
 
-
 #[test]
 fn incremental_cache_survives_backtracking() {
     let mut board = board_from_string(
@@ -163,6 +169,7 @@ fn incremental_cache_survives_backtracking() {
         &mut board,
         SolverConfig {
             use_hidden_singles: false,
+            ..SolverConfig::default()
         },
     );
 
@@ -173,7 +180,6 @@ fn incremental_cache_survives_backtracking() {
 
     assert_valid_solution(&board);
 }
-
 
 #[test]
 fn inspect_advanced_techniques() {
@@ -206,3 +212,36 @@ fn inspect_advanced_techniques() {
 }
 
 
+#[test]
+fn inspect_difficulty_ceiling() {
+    let puzzle = board_from_string(
+        "\
+        005300000\
+        800000020\
+        070010500\
+        400005300\
+        010070006\
+        003200080\
+        060500009\
+        004000030\
+        000009700",
+    );
+
+    for difficulty in [
+        Difficulty::Beginner,
+        Difficulty::Easy,
+        Difficulty::Medium,
+        Difficulty::Hard,
+        Difficulty::Expert,
+    ] {
+        let mut board = puzzle.clone();
+
+        let solved = solve_with_difficulty(&mut board, difficulty);
+
+        println!("{difficulty:?}: solved={solved}");
+
+        if solved {
+            assert_valid_solution(&board);
+        }
+    }
+}

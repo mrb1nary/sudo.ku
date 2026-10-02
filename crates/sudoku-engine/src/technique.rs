@@ -1,6 +1,10 @@
 use crate::board::Board;
 use crate::solver::{CandidateCache, Trail, Undo};
 
+// -----------------------------------------------------------------------------
+// Technique
+// -----------------------------------------------------------------------------
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Technique {
     NakedSingle,
@@ -20,28 +24,100 @@ impl Default for Technique {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// -----------------------------------------------------------------------------
+// Difficulty
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Difficulty {
+    Beginner,
     Easy,
     Medium,
     Hard,
+    Expert,
 }
 
 impl Difficulty {
-    pub fn from_profile(profile: &SolverProfile) -> Self {
-        match profile.hardest_technique {
-            Technique::NakedSingle => Self::Easy,
-            Technique::HiddenSingle
-            | Technique::NakedPair
+    pub fn from_technique(technique: Technique) -> Option<Self> {
+        match technique {
+            Technique::NakedSingle => Some(Self::Beginner),
+
+            Technique::HiddenSingle => Some(Self::Easy),
+
+            Technique::NakedPair
             | Technique::NakedTriple
-            | Technique::NakedQuad
-            | Technique::LockedCandidates
-            | Technique::XWing
-            | Technique::Swordfish => Self::Medium,
-            Technique::Guess => Self::Hard,
+            | Technique::LockedCandidates => Some(Self::Medium),
+
+            Technique::NakedQuad | Technique::XWing => Some(Self::Hard),
+
+            Technique::Swordfish => Some(Self::Expert),
+
+            // Guessing is search, not a human difficulty level.
+            Technique::Guess => None,
+        }
+    }
+
+    pub fn max_technique(self) -> Technique {
+        match self {
+            Self::Beginner => Technique::NakedSingle,
+            Self::Easy => Technique::HiddenSingle,
+            Self::Medium => Technique::LockedCandidates,
+            Self::Hard => Technique::XWing,
+            Self::Expert => Technique::Swordfish,
         }
     }
 }
+
+// -----------------------------------------------------------------------------
+// Technique Usage
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct TechniqueUsage {
+    pub naked_singles: usize,
+    pub hidden_singles: usize,
+    pub naked_pairs: usize,
+    pub naked_triples: usize,
+    pub naked_quads: usize,
+    pub locked_candidates: usize,
+    pub x_wings: usize,
+    pub swordfish: usize,
+    pub guesses: usize,
+}
+
+impl TechniqueUsage {
+    pub fn count(&self, technique: Technique) -> usize {
+        match technique {
+            Technique::NakedSingle => self.naked_singles,
+            Technique::HiddenSingle => self.hidden_singles,
+            Technique::NakedPair => self.naked_pairs,
+            Technique::NakedTriple => self.naked_triples,
+            Technique::NakedQuad => self.naked_quads,
+            Technique::LockedCandidates => self.locked_candidates,
+            Technique::XWing => self.x_wings,
+            Technique::Swordfish => self.swordfish,
+            Technique::Guess => self.guesses,
+        }
+    }
+
+    pub(crate) fn record(&mut self, technique: Technique) {
+        match technique {
+            Technique::NakedSingle => self.naked_singles += 1,
+            Technique::HiddenSingle => self.hidden_singles += 1,
+            Technique::NakedPair => self.naked_pairs += 1,
+            Technique::NakedTriple => self.naked_triples += 1,
+            Technique::NakedQuad => self.naked_quads += 1,
+            Technique::LockedCandidates => self.locked_candidates += 1,
+            Technique::XWing => self.x_wings += 1,
+            Technique::Swordfish => self.swordfish += 1,
+            Technique::Guess => self.guesses += 1,
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Solver Profile
+// -----------------------------------------------------------------------------
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SolverProfile {
@@ -52,11 +128,22 @@ pub struct SolverProfile {
     pub branches: usize,
     pub backtracks: usize,
     pub hardest_technique: Technique,
+    pub technique_usage: TechniqueUsage,
+}
+
+impl Difficulty {
+    pub fn from_profile(profile: &SolverProfile) -> Option<Self> {
+        Self::from_technique(profile.hardest_technique)
+    }
 }
 
 impl SolverProfile {
-    pub fn difficulty(&self) -> Difficulty {
+    pub fn difficulty(&self) -> Option<Difficulty> {
         Difficulty::from_profile(self)
+    }
+
+    pub fn technique_count(&self, technique: Technique) -> usize {
+        self.technique_usage.count(technique)
     }
 }
 
@@ -72,12 +159,14 @@ pub(crate) fn find_naked_single(
         for col in 0..9 {
             if board.is_empty(row, col) {
                 let mask = candidates[row][col];
+
                 if mask.count_ones() == 1 {
                     return Some((row, col, mask_to_value(mask)));
                 }
             }
         }
     }
+
     None
 }
 
@@ -127,7 +216,12 @@ fn find_hidden_single_in_row(
 
     for col in 0..9 {
         if board.is_empty(row, col) {
-            record_candidate_locations(candidates[row][col], col, &mut locations, &mut counts);
+            record_candidate_locations(
+                candidates[row][col],
+                col,
+                &mut locations,
+                &mut counts,
+            );
         }
     }
 
@@ -144,7 +238,12 @@ fn find_hidden_single_in_column(
 
     for row in 0..9 {
         if board.is_empty(row, col) {
-            record_candidate_locations(candidates[row][col], row, &mut locations, &mut counts);
+            record_candidate_locations(
+                candidates[row][col],
+                row,
+                &mut locations,
+                &mut counts,
+            );
         }
     }
 
@@ -159,6 +258,7 @@ fn find_hidden_single_in_box(
 ) -> Option<(usize, usize, u8)> {
     let mut locations = [None; 9];
     let mut counts = [0u8; 9];
+
     let start_row = box_row * 3;
     let start_col = box_col * 3;
 
@@ -175,7 +275,9 @@ fn find_hidden_single_in_box(
         }
     }
 
-    find_location(locations, counts, |location| (location / 9, location % 9))
+    find_location(locations, counts, |location| {
+        (location / 9, location % 9)
+    })
 }
 
 fn record_candidate_locations(
@@ -187,6 +289,7 @@ fn record_candidate_locations(
     for digit in 0..9 {
         if mask & (1 << digit) != 0 {
             counts[digit] += 1;
+
             if counts[digit] == 1 {
                 locations[digit] = Some(location);
             }
@@ -203,9 +306,11 @@ fn find_location(
         if counts[digit] == 1 {
             let location = locations[digit].unwrap();
             let (row, col) = make_location(location);
+
             return Some((row, col, digit as u8 + 1));
         }
     }
+
     None
 }
 
@@ -219,7 +324,9 @@ pub(crate) fn find_naked_pair(
     trail: &mut Trail,
 ) -> bool {
     for cells in all_units() {
-        if let Some((pair_cells, pair_mask)) = find_naked_n_in_unit(board, candidates, &cells, 2) {
+        if let Some((pair_cells, pair_mask)) =
+            find_naked_n_in_unit(board, candidates, &cells, 2)
+        {
             if eliminate_naked_n_from_unit(
                 board,
                 candidates,
@@ -232,6 +339,7 @@ pub(crate) fn find_naked_pair(
             }
         }
     }
+
     false
 }
 
@@ -241,7 +349,9 @@ pub(crate) fn find_naked_triple(
     trail: &mut Trail,
 ) -> bool {
     for cells in all_units() {
-        if let Some((triple_cells, triple_mask)) = find_naked_n_in_unit(board, candidates, &cells, 3) {
+        if let Some((triple_cells, triple_mask)) =
+            find_naked_n_in_unit(board, candidates, &cells, 3)
+        {
             if eliminate_naked_n_from_unit(
                 board,
                 candidates,
@@ -254,6 +364,7 @@ pub(crate) fn find_naked_triple(
             }
         }
     }
+
     false
 }
 
@@ -263,7 +374,9 @@ pub(crate) fn find_naked_quad(
     trail: &mut Trail,
 ) -> bool {
     for cells in all_units() {
-        if let Some((quad_cells, quad_mask)) = find_naked_n_in_unit(board, candidates, &cells, 4) {
+        if let Some((quad_cells, quad_mask)) =
+            find_naked_n_in_unit(board, candidates, &cells, 4)
+        {
             if eliminate_naked_n_from_unit(
                 board,
                 candidates,
@@ -276,6 +389,7 @@ pub(crate) fn find_naked_quad(
             }
         }
     }
+
     false
 }
 
@@ -291,16 +405,25 @@ fn find_naked_n_in_unit(
             if board.is_empty(row, col) {
                 let mask = candidates[row][col];
                 let count = mask.count_ones() as usize;
+
                 if (2..=n).contains(&count) {
                     return Some((row * 9 + col, mask));
                 }
             }
+
             None
         })
         .collect();
 
     let mut chosen = Vec::with_capacity(n);
-    find_naked_combination(&eligible, n, 0, &mut chosen, 0)
+
+    find_naked_combination(
+        &eligible,
+        n,
+        0,
+        &mut chosen,
+        0,
+    )
 }
 
 fn find_naked_combination(
@@ -314,16 +437,19 @@ fn find_naked_combination(
         if mask.count_ones() == n as u32 {
             return Some((chosen.clone(), mask));
         }
+
         return None;
     }
 
     for index in start..eligible.len() {
         let next_mask = mask | eligible[index].1;
+
         if next_mask.count_ones() > n as u32 {
             continue;
         }
 
         chosen.push(eligible[index].0);
+
         if let Some(result) = find_naked_combination(
             eligible,
             n,
@@ -333,6 +459,7 @@ fn find_naked_combination(
         ) {
             return Some(result);
         }
+
         chosen.pop();
     }
 
@@ -351,17 +478,24 @@ fn eliminate_naked_n_from_unit(
 
     for &(row, col) in cells {
         let index = row * 9 + col;
+
         if pattern_cells.contains(&index) || !board.is_empty(row, col) {
             continue;
         }
 
         let previous = candidates[row][col];
         let next = previous & !pattern_mask;
+
         if previous == next {
             continue;
         }
 
-        trail.push(Undo::Candidate { row, col, previous });
+        trail.push(Undo::Candidate {
+            row,
+            col,
+            previous,
+        });
+
         candidates[row][col] = next;
         changed = true;
     }
@@ -382,7 +516,8 @@ pub(crate) fn find_locked_candidates(
     candidates: &mut CandidateCache,
     trail: &mut Trail,
 ) -> bool {
-    find_pointing(board, candidates, trail) || find_claiming(board, candidates, trail)
+    find_pointing(board, candidates, trail)
+        || find_claiming(board, candidates, trail)
 }
 
 fn find_pointing(
@@ -401,7 +536,9 @@ fn find_pointing(
 
                 for row in start_row..start_row + 3 {
                     for col in start_col..start_col + 3 {
-                        if board.is_empty(row, col) && candidates[row][col] & bit != 0 {
+                        if board.is_empty(row, col)
+                            && candidates[row][col] & bit != 0
+                        {
                             locations.push((row, col));
                         }
                     }
@@ -411,27 +548,49 @@ fn find_pointing(
                     continue;
                 }
 
-                let same_row = locations.iter().all(|&(row, _)| row == locations[0].0);
+                let same_row = locations
+                    .iter()
+                    .all(|&(row, _)| row == locations[0].0);
+
                 if same_row {
                     let row = locations[0].0;
+
                     for col in 0..9 {
-                        if (col / 3 == box_col) || !board.is_empty(row, col) {
+                        if col / 3 == box_col || !board.is_empty(row, col) {
                             continue;
                         }
-                        if remove_candidate(candidates, trail, row, col, bit) {
+
+                        if remove_candidate(
+                            candidates,
+                            trail,
+                            row,
+                            col,
+                            bit,
+                        ) {
                             return true;
                         }
                     }
                 }
 
-                let same_col = locations.iter().all(|&(_, col)| col == locations[0].1);
+                let same_col = locations
+                    .iter()
+                    .all(|&(_, col)| col == locations[0].1);
+
                 if same_col {
                     let col = locations[0].1;
+
                     for row in 0..9 {
-                        if (row / 3 == box_row) || !board.is_empty(row, col) {
+                        if row / 3 == box_row || !board.is_empty(row, col) {
                             continue;
                         }
-                        if remove_candidate(candidates, trail, row, col, bit) {
+
+                        if remove_candidate(
+                            candidates,
+                            trail,
+                            row,
+                            col,
+                            bit,
+                        ) {
                             return true;
                         }
                     }
@@ -451,8 +610,12 @@ fn find_claiming(
     for row in 0..9 {
         for digit in 0..9 {
             let bit = 1u16 << digit;
+
             let cols: Vec<usize> = (0..9)
-                .filter(|&col| board.is_empty(row, col) && candidates[row][col] & bit != 0)
+                .filter(|&col| {
+                    board.is_empty(row, col)
+                        && candidates[row][col] & bit != 0
+                })
                 .collect();
 
             if cols.len() < 2 {
@@ -460,14 +623,23 @@ fn find_claiming(
             }
 
             let box_col = cols[0] / 3;
+
             if cols.iter().all(|&col| col / 3 == box_col) {
                 let box_row = row / 3;
+
                 for box_r in box_row * 3..box_row * 3 + 3 {
                     for box_c in box_col * 3..box_col * 3 + 3 {
                         if box_r == row || !board.is_empty(box_r, box_c) {
                             continue;
                         }
-                        if remove_candidate(candidates, trail, box_r, box_c, bit) {
+
+                        if remove_candidate(
+                            candidates,
+                            trail,
+                            box_r,
+                            box_c,
+                            bit,
+                        ) {
                             return true;
                         }
                     }
@@ -479,8 +651,12 @@ fn find_claiming(
     for col in 0..9 {
         for digit in 0..9 {
             let bit = 1u16 << digit;
+
             let rows: Vec<usize> = (0..9)
-                .filter(|&row| board.is_empty(row, col) && candidates[row][col] & bit != 0)
+                .filter(|&row| {
+                    board.is_empty(row, col)
+                        && candidates[row][col] & bit != 0
+                })
                 .collect();
 
             if rows.len() < 2 {
@@ -488,14 +664,23 @@ fn find_claiming(
             }
 
             let box_row = rows[0] / 3;
+
             if rows.iter().all(|&row| row / 3 == box_row) {
                 let box_col = col / 3;
+
                 for box_r in box_row * 3..box_row * 3 + 3 {
                     for box_c in box_col * 3..box_col * 3 + 3 {
                         if box_c == col || !board.is_empty(box_r, box_c) {
                             continue;
                         }
-                        if remove_candidate(candidates, trail, box_r, box_c, bit) {
+
+                        if remove_candidate(
+                            candidates,
+                            trail,
+                            box_r,
+                            box_c,
+                            bit,
+                        ) {
                             return true;
                         }
                     }
@@ -516,7 +701,8 @@ pub(crate) fn find_x_wing(
     candidates: &mut CandidateCache,
     trail: &mut Trail,
 ) -> bool {
-    find_x_wing_rows(board, candidates, trail) || find_x_wing_columns(board, candidates, trail)
+    find_x_wing_rows(board, candidates, trail)
+        || find_x_wing_columns(board, candidates, trail)
 }
 
 fn find_x_wing_rows(
@@ -530,11 +716,15 @@ fn find_x_wing_rows(
 
         for row in 0..9 {
             let mut mask = 0u16;
+
             for col in 0..9 {
-                if board.is_empty(row, col) && candidates[row][col] & bit != 0 {
+                if board.is_empty(row, col)
+                    && candidates[row][col] & bit != 0
+                {
                     mask |= 1 << col;
                 }
             }
+
             if mask.count_ones() == 2 {
                 row_masks[row] = mask;
             }
@@ -544,8 +734,11 @@ fn find_x_wing_rows(
             if row_masks[row_a] == 0 {
                 continue;
             }
+
             for row_b in row_a + 1..9 {
-                if row_masks[row_a] != row_masks[row_b] || row_masks[row_b] == 0 {
+                if row_masks[row_a] != row_masks[row_b]
+                    || row_masks[row_b] == 0
+                {
                     continue;
                 }
 
@@ -553,9 +746,16 @@ fn find_x_wing_rows(
                     if row == row_a || row == row_b {
                         continue;
                     }
+
                     for col in 0..9 {
                         if row_masks[row_a] & (1 << col) != 0
-                            && remove_candidate(candidates, trail, row, col, bit)
+                            && remove_candidate(
+                            candidates,
+                            trail,
+                            row,
+                            col,
+                            bit,
+                        )
                         {
                             return true;
                         }
@@ -579,11 +779,15 @@ fn find_x_wing_columns(
 
         for col in 0..9 {
             let mut mask = 0u16;
+
             for row in 0..9 {
-                if board.is_empty(row, col) && candidates[row][col] & bit != 0 {
+                if board.is_empty(row, col)
+                    && candidates[row][col] & bit != 0
+                {
                     mask |= 1 << row;
                 }
             }
+
             if mask.count_ones() == 2 {
                 col_masks[col] = mask;
             }
@@ -593,8 +797,11 @@ fn find_x_wing_columns(
             if col_masks[col_a] == 0 {
                 continue;
             }
+
             for col_b in col_a + 1..9 {
-                if col_masks[col_a] != col_masks[col_b] || col_masks[col_b] == 0 {
+                if col_masks[col_a] != col_masks[col_b]
+                    || col_masks[col_b] == 0
+                {
                     continue;
                 }
 
@@ -602,9 +809,16 @@ fn find_x_wing_columns(
                     if col == col_a || col == col_b {
                         continue;
                     }
+
                     for row in 0..9 {
                         if col_masks[col_a] & (1 << row) != 0
-                            && remove_candidate(candidates, trail, row, col, bit)
+                            && remove_candidate(
+                            candidates,
+                            trail,
+                            row,
+                            col,
+                            bit,
+                        )
                         {
                             return true;
                         }
@@ -626,7 +840,8 @@ pub(crate) fn find_swordfish(
     candidates: &mut CandidateCache,
     trail: &mut Trail,
 ) -> bool {
-    find_swordfish_rows(board, candidates, trail) || find_swordfish_columns(board, candidates, trail)
+    find_swordfish_rows(board, candidates, trail)
+        || find_swordfish_columns(board, candidates, trail)
 }
 
 fn find_swordfish_rows(
@@ -640,12 +855,17 @@ fn find_swordfish_rows(
 
         for row in 0..9 {
             let mut mask = 0u16;
+
             for col in 0..9 {
-                if board.is_empty(row, col) && candidates[row][col] & bit != 0 {
+                if board.is_empty(row, col)
+                    && candidates[row][col] & bit != 0
+                {
                     mask |= 1 << col;
                 }
             }
+
             let count = mask.count_ones();
+
             if (2..=3).contains(&count) {
                 masks[row] = mask;
             }
@@ -655,16 +875,19 @@ fn find_swordfish_rows(
             if masks[a] == 0 {
                 continue;
             }
+
             for b in a + 1..9 {
                 if masks[b] == 0 {
                     continue;
                 }
+
                 for c in b + 1..9 {
                     if masks[c] == 0 {
                         continue;
                     }
 
                     let union = masks[a] | masks[b] | masks[c];
+
                     if union.count_ones() != 3 {
                         continue;
                     }
@@ -673,9 +896,16 @@ fn find_swordfish_rows(
                         if row == a || row == b || row == c {
                             continue;
                         }
+
                         for col in 0..9 {
                             if union & (1 << col) != 0
-                                && remove_candidate(candidates, trail, row, col, bit)
+                                && remove_candidate(
+                                candidates,
+                                trail,
+                                row,
+                                col,
+                                bit,
+                            )
                             {
                                 return true;
                             }
@@ -700,12 +930,17 @@ fn find_swordfish_columns(
 
         for col in 0..9 {
             let mut mask = 0u16;
+
             for row in 0..9 {
-                if board.is_empty(row, col) && candidates[row][col] & bit != 0 {
+                if board.is_empty(row, col)
+                    && candidates[row][col] & bit != 0
+                {
                     mask |= 1 << row;
                 }
             }
+
             let count = mask.count_ones();
+
             if (2..=3).contains(&count) {
                 masks[col] = mask;
             }
@@ -715,16 +950,19 @@ fn find_swordfish_columns(
             if masks[a] == 0 {
                 continue;
             }
+
             for b in a + 1..9 {
                 if masks[b] == 0 {
                     continue;
                 }
+
                 for c in b + 1..9 {
                     if masks[c] == 0 {
                         continue;
                     }
 
                     let union = masks[a] | masks[b] | masks[c];
+
                     if union.count_ones() != 3 {
                         continue;
                     }
@@ -733,9 +971,16 @@ fn find_swordfish_columns(
                         if col == a || col == b || col == c {
                             continue;
                         }
+
                         for row in 0..9 {
                             if union & (1 << row) != 0
-                                && remove_candidate(candidates, trail, row, col, bit)
+                                && remove_candidate(
+                                candidates,
+                                trail,
+                                row,
+                                col,
+                                bit,
+                            )
                             {
                                 return true;
                             }
@@ -767,11 +1012,13 @@ fn all_units() -> Vec<Vec<(usize, usize)>> {
     for box_row in 0..3 {
         for box_col in 0..3 {
             let mut cells = Vec::with_capacity(9);
+
             for row in box_row * 3..box_row * 3 + 3 {
                 for col in box_col * 3..box_col * 3 + 3 {
                     cells.push((row, col));
                 }
             }
+
             units.push(cells);
         }
     }
@@ -794,8 +1041,14 @@ fn remove_candidate(
         return false;
     }
 
-    trail.push(Undo::Candidate { row, col, previous });
+    trail.push(Undo::Candidate {
+        row,
+        col,
+        previous,
+    });
+
     candidates[row][col] = next;
+
     true
 }
 

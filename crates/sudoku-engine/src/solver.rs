@@ -1,10 +1,23 @@
-
 use crate::board::Board;
-pub use crate::technique::{Difficulty, SolverProfile, Technique};
-use crate::technique::{
-    find_hidden_single, find_locked_candidates, find_naked_pair, find_naked_quad,
-    find_naked_single, find_naked_triple, find_swordfish, find_x_wing,
+
+pub use crate::technique::{
+    Difficulty,
+    SolverProfile,
+    Technique,
+    TechniqueUsage,
 };
+
+use crate::technique::{
+    find_hidden_single,
+    find_locked_candidates,
+    find_naked_pair,
+    find_naked_quad,
+    find_naked_single,
+    find_naked_triple,
+    find_swordfish,
+    find_x_wing,
+};
+
 const ALL_DIGITS: u16 = 0b1_1111_1111;
 
 pub(crate) type CandidateCache = [[u16; 9]; 9];
@@ -17,22 +30,25 @@ pub struct SolverStats {
     pub branches: usize,
     pub backtracks: usize,
     pub hardest_technique: Technique,
+    pub technique_usage: TechniqueUsage,
 }
-
 
 #[derive(Debug, Clone, Copy)]
 pub struct SolverConfig {
     pub use_hidden_singles: bool,
+    pub max_technique: Option<Technique>,
+    pub allow_guess: bool,
 }
 
 impl Default for SolverConfig {
     fn default() -> Self {
         Self {
             use_hidden_singles: true,
+            max_technique: None,
+            allow_guess: true,
         }
     }
 }
-
 
 #[derive(Clone)]
 pub struct SolverState {
@@ -91,15 +107,13 @@ impl SolverState {
 
     #[inline]
     fn candidate_mask(&self, row: usize, col: usize) -> u16 {
-        let used =
-            self.row_masks[row]
-                | self.col_masks[col]
-                | self.box_masks[box_index(row, col)];
+        let used = self.row_masks[row]
+            | self.col_masks[col]
+            | self.box_masks[box_index(row, col)];
 
         ALL_DIGITS & !used
     }
 }
-
 
 pub(crate) enum Undo {
     BoardCell {
@@ -130,7 +144,7 @@ pub(crate) struct Trail {
 }
 
 impl Trail {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             entries: Vec::new(),
         }
@@ -158,15 +172,19 @@ impl Trail {
                 Undo::BoardCell { row, col } => {
                     board.clear(row, col);
                 }
+
                 Undo::RowMask { row, previous } => {
                     state.row_masks[row] = previous;
                 }
+
                 Undo::ColMask { col, previous } => {
                     state.col_masks[col] = previous;
                 }
+
                 Undo::BoxMask { index, previous } => {
                     state.box_masks[index] = previous;
                 }
+
                 Undo::Candidate {
                     row,
                     col,
@@ -181,6 +199,19 @@ impl Trail {
 
 pub fn solve(board: &mut Board) -> bool {
     solve_with_config(board, SolverConfig::default())
+}
+
+pub fn solve_with_difficulty(
+    board: &mut Board,
+    difficulty: Difficulty,
+) -> bool {
+    let config = SolverConfig {
+        use_hidden_singles: true,
+        max_technique: Some(difficulty.max_technique()),
+        allow_guess: false,
+    };
+
+    solve_with_config(board, config)
 }
 
 fn count_recursive(
@@ -200,7 +231,9 @@ fn count_recursive(
             return 1;
         }
 
-        if let Some((row, col, value)) = find_naked_single(board, candidates) {
+        if let Some((row, col, value)) =
+            find_naked_single(board, candidates)
+        {
             place_value(
                 board,
                 state,
@@ -297,7 +330,12 @@ fn count_recursive(
             limit - solutions,
         );
 
-        trail.undo_to(branch_checkpoint, board, state, candidates);
+        trail.undo_to(
+            branch_checkpoint,
+            board,
+            state,
+            candidates,
+        );
     }
 
     trail.undo_to(checkpoint, board, state, candidates);
@@ -305,7 +343,10 @@ fn count_recursive(
     solutions
 }
 
-pub fn solve_with_config(board: &mut Board, config: SolverConfig) -> bool {
+pub fn solve_with_config(
+    board: &mut Board,
+    config: SolverConfig,
+) -> bool {
     let Some(mut state) = SolverState::from_board(board) else {
         return false;
     };
@@ -323,8 +364,15 @@ pub fn solve_with_config(board: &mut Board, config: SolverConfig) -> bool {
     )
 }
 
-pub fn count_solutions(board: &mut Board, limit: usize) -> usize {
-    count_solutions_with_config(board, limit, SolverConfig::default())
+pub fn count_solutions(
+    board: &mut Board,
+    limit: usize,
+) -> usize {
+    count_solutions_with_config(
+        board,
+        limit,
+        SolverConfig::default(),
+    )
 }
 
 pub fn count_solutions_with_config(
@@ -353,8 +401,13 @@ pub fn count_solutions_with_config(
     )
 }
 
-pub fn solve_with_stats(board: &mut Board) -> SolverStats {
-    solve_with_stats_config(board, SolverConfig::default())
+pub fn solve_with_stats(
+    board: &mut Board,
+) -> SolverStats {
+    solve_with_stats_config(
+        board,
+        SolverConfig::default(),
+    )
 }
 
 pub fn solve_with_stats_config(
@@ -381,7 +434,6 @@ pub fn solve_with_stats_config(
 
     stats
 }
-
 
 fn count_clues(board: &Board) -> usize {
     let mut clues = 0;
@@ -415,23 +467,36 @@ fn solve_recursive(
             return true;
         }
 
-        if let Some((row, col, value)) = find_naked_single(board, candidates) {
-            place_value(
-                board,
-                state,
-                candidates,
-                trail,
-                row,
-                col,
-                value,
-            );
+        if technique_allowed(config, Technique::NakedSingle) {
+            if let Some((row, col, value)) =
+                find_naked_single(board, candidates)
+            {
+                place_value(
+                    board,
+                    state,
+                    candidates,
+                    trail,
+                    row,
+                    col,
+                    value,
+                );
 
-            record_forced_move(&mut stats);
-            record_technique(&mut stats, Technique::NakedSingle);
-            continue;
+                record_forced_move(&mut stats);
+                record_technique(
+                    &mut stats,
+                    Technique::NakedSingle,
+                );
+
+                continue;
+            }
         }
 
-        if config.use_hidden_singles {
+        if config.use_hidden_singles
+            && technique_allowed(
+            config,
+            Technique::HiddenSingle,
+        )
+        {
             if let Some((row, col, value)) =
                 find_hidden_single(board, candidates)
             {
@@ -447,39 +512,119 @@ fn solve_recursive(
 
                 record_forced_move(&mut stats);
                 record_hidden_single(&mut stats);
-                record_technique(&mut stats, Technique::HiddenSingle);
+                record_technique(
+                    &mut stats,
+                    Technique::HiddenSingle,
+                );
+
                 continue;
             }
         }
 
-        if find_naked_pair(board, candidates, trail) {
-            record_technique(&mut stats, Technique::NakedPair);
+        if technique_allowed(config, Technique::NakedPair)
+            && find_naked_pair(
+            board,
+            candidates,
+            trail,
+        )
+        {
+            record_technique(
+                &mut stats,
+                Technique::NakedPair,
+            );
+
             continue;
         }
 
-        if find_naked_triple(board, candidates, trail) {
-            record_technique(&mut stats, Technique::NakedTriple);
+        if technique_allowed(
+            config,
+            Technique::NakedTriple,
+        ) && find_naked_triple(
+            board,
+            candidates,
+            trail,
+        ) {
+            record_technique(
+                &mut stats,
+                Technique::NakedTriple,
+            );
+
             continue;
         }
 
-        if find_naked_quad(board, candidates, trail) {
-            record_technique(&mut stats, Technique::NakedQuad);
+        if technique_allowed(
+            config,
+            Technique::NakedQuad,
+        ) && find_naked_quad(
+            board,
+            candidates,
+            trail,
+        ) {
+            record_technique(
+                &mut stats,
+                Technique::NakedQuad,
+            );
+
             continue;
         }
 
-        if find_locked_candidates(board, candidates, trail) {
-            record_technique(&mut stats, Technique::LockedCandidates);
+        if technique_allowed(
+            config,
+            Technique::LockedCandidates,
+        ) && find_locked_candidates(
+            board,
+            candidates,
+            trail,
+        ) {
+            record_technique(
+                &mut stats,
+                Technique::LockedCandidates,
+            );
+
             continue;
         }
 
-        if find_x_wing(board, candidates, trail) {
-            record_technique(&mut stats, Technique::XWing);
+        if technique_allowed(
+            config,
+            Technique::XWing,
+        ) && find_x_wing(
+            board,
+            candidates,
+            trail,
+        ) {
+            record_technique(
+                &mut stats,
+                Technique::XWing,
+            );
+
             continue;
         }
 
-        if find_swordfish(board, candidates, trail) {
-            record_technique(&mut stats, Technique::Swordfish);
+        if technique_allowed(
+            config,
+            Technique::Swordfish,
+        ) && find_swordfish(
+            board,
+            candidates,
+            trail,
+        ) {
+            record_technique(
+                &mut stats,
+                Technique::Swordfish,
+            );
+
             continue;
+        }
+
+        if !config.allow_guess {
+            trail.undo_to(
+                checkpoint,
+                board,
+                state,
+                candidates,
+            );
+
+            return false;
         }
 
         break;
@@ -494,12 +639,21 @@ fn solve_recursive(
 
     // An empty candidate set is a contradiction.
     if remaining == 0 {
-        trail.undo_to(checkpoint, board, state, candidates);
+        trail.undo_to(
+            checkpoint,
+            board,
+            state,
+            candidates,
+        );
+
         return false;
     }
 
     record_branch(&mut stats);
-    record_technique(&mut stats, Technique::Guess);
+    record_technique(
+        &mut stats,
+        Technique::Guess,
+    );
 
     while remaining != 0 {
         let value = next_value(&mut remaining);
@@ -526,16 +680,33 @@ fn solve_recursive(
             return true;
         }
 
-        trail.undo_to(branch_checkpoint, board, state, candidates);
+        trail.undo_to(
+            branch_checkpoint,
+            board,
+            state,
+            candidates,
+        );
+
         record_backtrack(&mut stats);
     }
 
-    trail.undo_to(checkpoint, board, state, candidates);
+    trail.undo_to(
+        checkpoint,
+        board,
+        state,
+        candidates,
+    );
+
     false
 }
 
-pub fn profile(board: &mut Board) -> SolverProfile {
-    profile_with_config(board, SolverConfig::default())
+pub fn profile(
+    board: &mut Board,
+) -> SolverProfile {
+    profile_with_config(
+        board,
+        SolverConfig::default(),
+    )
 }
 
 pub fn profile_with_config(
@@ -544,7 +715,10 @@ pub fn profile_with_config(
 ) -> SolverProfile {
     let clues = count_clues(board);
 
-    let stats = solve_with_stats_config(board, config);
+    let stats = solve_with_stats_config(
+        board,
+        config,
+    );
 
     SolverProfile {
         clues,
@@ -554,10 +728,13 @@ pub fn profile_with_config(
         branches: stats.branches,
         backtracks: stats.backtracks,
         hardest_technique: stats.hardest_technique,
+        technique_usage: stats.technique_usage,
     }
 }
 
-fn board_is_complete(board: &Board) -> bool {
+fn board_is_complete(
+    board: &Board,
+) -> bool {
     for row in 0..9 {
         for col in 0..9 {
             if board.is_empty(row, col) {
@@ -578,7 +755,8 @@ fn build_candidate_cache(
     for row in 0..9 {
         for col in 0..9 {
             if board.is_empty(row, col) {
-                candidates[row][col] = state.candidate_mask(row, col);
+                candidates[row][col] =
+                    state.candidate_mask(row, col);
             }
         }
     }
@@ -595,8 +773,16 @@ fn place_value(
     col: usize,
     value: u8,
 ) {
-    trail.push(Undo::BoardCell { row, col });
-    board.set(row, col, value);
+    trail.push(Undo::BoardCell {
+        row,
+        col,
+    });
+
+    board.set(
+        row,
+        col,
+        value,
+    );
 
     let bit = digit_bit(value);
     let box_index = box_index(row, col);
@@ -616,7 +802,11 @@ fn place_value(
         previous: state.box_masks[box_index],
     });
 
-    state.place(row, col, value);
+    state.place(
+        row,
+        col,
+        value,
+    );
 
     // The placed cell is no longer empty.
     let previous = candidates[row][col];
@@ -669,11 +859,19 @@ fn remove_candidate_from_row(
     bit: u16,
 ) {
     for peer_col in 0..9 {
-        if peer_col == col || !board.is_empty(row, peer_col) {
+        if peer_col == col
+            || !board.is_empty(row, peer_col)
+        {
             continue;
         }
 
-        remove_candidate(candidates, trail, row, peer_col, bit);
+        remove_candidate(
+            candidates,
+            trail,
+            row,
+            peer_col,
+            bit,
+        );
     }
 }
 
@@ -686,11 +884,19 @@ fn remove_candidate_from_column(
     bit: u16,
 ) {
     for peer_row in 0..9 {
-        if peer_row == row || !board.is_empty(peer_row, col) {
+        if peer_row == row
+            || !board.is_empty(peer_row, col)
+        {
             continue;
         }
 
-        remove_candidate(candidates, trail, peer_row, col, bit);
+        remove_candidate(
+            candidates,
+            trail,
+            peer_row,
+            col,
+            bit,
+        );
     }
 }
 
@@ -708,7 +914,10 @@ fn remove_candidate_from_box(
     for peer_row in start_row..start_row + 3 {
         for peer_col in start_col..start_col + 3 {
             if (peer_row == row && peer_col == col)
-                || !board.is_empty(peer_row, peer_col)
+                || !board.is_empty(
+                peer_row,
+                peer_col,
+            )
             {
                 continue;
             }
@@ -748,7 +957,6 @@ fn remove_candidate(
     candidates[row][col] = next;
 }
 
-
 fn find_best_empty(
     board: &Board,
     candidates: &CandidateCache,
@@ -786,7 +994,9 @@ fn find_best_empty(
 }
 
 #[inline]
-fn next_value(mask: &mut u16) -> u8 {
+fn next_value(
+    mask: &mut u16,
+) -> u8 {
     let bit = mask.trailing_zeros();
 
     *mask &= *mask - 1;
@@ -795,18 +1005,36 @@ fn next_value(mask: &mut u16) -> u8 {
 }
 
 #[inline]
-fn mask_to_value(mask: u16) -> u8 {
+fn mask_to_value(
+    mask: u16,
+) -> u8 {
     mask.trailing_zeros() as u8 + 1
 }
 
 #[inline]
-fn digit_bit(value: u8) -> u16 {
+fn digit_bit(
+    value: u8,
+) -> u16 {
     1 << (value - 1)
 }
 
 #[inline]
-fn box_index(row: usize, col: usize) -> usize {
+fn box_index(
+    row: usize,
+    col: usize,
+) -> usize {
     (row / 3) * 3 + (col / 3)
+}
+
+#[inline]
+fn technique_allowed(
+    config: SolverConfig,
+    technique: Technique,
+) -> bool {
+    match config.max_technique {
+        Some(max) => technique <= max,
+        None => true,
+    }
 }
 
 #[inline]
@@ -815,40 +1043,53 @@ fn record_technique(
     technique: Technique,
 ) {
     if let Some(stats) = stats.as_deref_mut() {
-        stats.hardest_technique = stats.hardest_technique.max(technique);
+        stats.hardest_technique =
+            stats.hardest_technique.max(technique);
+
+        stats.technique_usage.record(technique);
     }
 }
 
 #[inline]
-fn record_recursive_call(stats: &mut Option<&mut SolverStats>) {
+fn record_recursive_call(
+    stats: &mut Option<&mut SolverStats>,
+) {
     if let Some(stats) = stats.as_deref_mut() {
         stats.recursive_calls += 1;
     }
 }
 
 #[inline]
-fn record_forced_move(stats: &mut Option<&mut SolverStats>) {
+fn record_forced_move(
+    stats: &mut Option<&mut SolverStats>,
+) {
     if let Some(stats) = stats.as_deref_mut() {
         stats.forced_moves += 1;
     }
 }
 
 #[inline]
-fn record_hidden_single(stats: &mut Option<&mut SolverStats>) {
+fn record_hidden_single(
+    stats: &mut Option<&mut SolverStats>,
+) {
     if let Some(stats) = stats.as_deref_mut() {
         stats.hidden_singles += 1;
     }
 }
 
 #[inline]
-fn record_branch(stats: &mut Option<&mut SolverStats>) {
+fn record_branch(
+    stats: &mut Option<&mut SolverStats>,
+) {
     if let Some(stats) = stats.as_deref_mut() {
         stats.branches += 1;
     }
 }
 
 #[inline]
-fn record_backtrack(stats: &mut Option<&mut SolverStats>) {
+fn record_backtrack(
+    stats: &mut Option<&mut SolverStats>,
+) {
     if let Some(stats) = stats.as_deref_mut() {
         stats.backtracks += 1;
     }

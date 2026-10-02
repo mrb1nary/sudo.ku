@@ -18,6 +18,7 @@ pub struct SudokuGame {
     givens: [bool; 81],
     solution: Option<Board>,
 }
+
 impl Default for SudokuGame {
     fn default() -> Self {
         Self::new()
@@ -29,7 +30,6 @@ impl SudokuGame {
     // --------------------------------------------------
     // Constructors
     // --------------------------------------------------
-
 
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
@@ -103,8 +103,6 @@ impl SudokuGame {
         })
     }
 
-
-    #[wasm_bindgen]
     pub fn from_puzzle(puzzle: Vec<u8>) -> Option<Self> {
         if puzzle.len() != 81 {
             return None;
@@ -201,7 +199,12 @@ impl SudokuGame {
     // Gameplay
     // --------------------------------------------------
 
-    pub fn make_move(&mut self, row: usize, col: usize, value: u8) -> bool {
+    pub fn make_move(
+        &mut self,
+        row: usize,
+        col: usize,
+        value: u8,
+    ) -> bool {
         if row >= 9 || col >= 9 {
             return false;
         }
@@ -233,7 +236,11 @@ impl SudokuGame {
         true
     }
 
-    pub fn clear_move(&mut self, row: usize, col: usize) -> bool {
+    pub fn clear_move(
+        &mut self,
+        row: usize,
+        col: usize,
+    ) -> bool {
         if row >= 9 || col >= 9 {
             return false;
         }
@@ -276,7 +283,9 @@ impl SudokuGame {
 
         for row in 0..9 {
             for col in 0..9 {
-                if self.board.get(row, col) != solution.get(row, col) {
+                if self.board.get(row, col)
+                    != solution.get(row, col)
+                {
                     return false;
                 }
             }
@@ -285,7 +294,12 @@ impl SudokuGame {
         true
     }
 
-    pub fn is_correct(&self, row: usize, col: usize, value: u8) -> bool {
+    pub fn is_correct(
+        &self,
+        row: usize,
+        col: usize,
+        value: u8,
+    ) -> bool {
         if row >= 9 || col >= 9 {
             return false;
         }
@@ -301,7 +315,12 @@ impl SudokuGame {
     // Sudoku helpers
     // --------------------------------------------------
 
-    pub fn can_place(&self, row: usize, col: usize, value: u8) -> bool {
+    pub fn can_place(
+        &self,
+        row: usize,
+        col: usize,
+        value: u8,
+    ) -> bool {
         if row >= 9 || col >= 9 {
             return false;
         }
@@ -333,17 +352,27 @@ impl SudokuGame {
     ) -> bool {
         let config = SolverConfig {
             use_hidden_singles,
+            max_technique: None,
+            allow_guess: true,
         };
 
-        solve_with_config(&mut self.board, config)
+        solve_with_config(
+            &mut self.board,
+            config,
+        )
     }
 
     pub fn solve_with_stats(&mut self) -> Vec<usize> {
         let config = SolverConfig {
             use_hidden_singles: true,
+            max_technique: None,
+            allow_guess: true,
         };
 
-        let stats = solve_with_stats_config(&mut self.board, config);
+        let stats = solve_with_stats_config(
+            &mut self.board,
+            config,
+        );
 
         Self::stats_to_vec(&stats)
     }
@@ -354,20 +383,39 @@ impl SudokuGame {
     ) -> Vec<usize> {
         let config = SolverConfig {
             use_hidden_singles,
+            max_technique: None,
+            allow_guess: true,
         };
 
-        let stats = solve_with_stats_config(&mut self.board, config);
+        let stats = solve_with_stats_config(
+            &mut self.board,
+            config,
+        );
 
         Self::stats_to_vec(&stats)
     }
 
-    fn stats_to_vec(stats: &SolverStats) -> Vec<usize> {
+    fn stats_to_vec(
+        stats: &SolverStats,
+    ) -> Vec<usize> {
         vec![
+            // Existing solver statistics.
             stats.recursive_calls,
             stats.forced_moves,
             stats.hidden_singles,
             stats.branches,
             stats.backtracks,
+
+            // Technique usage.
+            stats.technique_usage.naked_singles,
+            stats.technique_usage.hidden_singles,
+            stats.technique_usage.naked_pairs,
+            stats.technique_usage.naked_triples,
+            stats.technique_usage.naked_quads,
+            stats.technique_usage.locked_candidates,
+            stats.technique_usage.x_wings,
+            stats.technique_usage.swordfish,
+            stats.technique_usage.guesses,
         ]
     }
 }
