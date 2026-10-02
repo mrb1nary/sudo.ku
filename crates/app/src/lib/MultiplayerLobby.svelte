@@ -55,6 +55,13 @@
     let timeLimitMinutes = $state(15);
     let settingsOpen = $state(false);
 
+    let creatingRoom = $state(false);
+    let joiningRoom = $state(false);
+
+    let roomActionLoading = $derived(
+        creatingRoom || joiningRoom,
+    );
+
     let playerOneName = $state("");
     let playerTwoName = $state("");
     let playerOneId = $state<number | null>(null);
@@ -150,6 +157,8 @@
 
                 switch (message.type) {
                     case "room_created":
+                        creatingRoom = false;
+
                         createdRoomCode = message.room_code;
                         roomCode = message.room_code;
                         applySettings(message.settings);
@@ -158,6 +167,8 @@
                         break;
 
                     case "room_joined":
+                        joiningRoom = false;
+
                         roomCode = message.room_code;
                         yourPlayerId = message.player_id;
                         status = `Joined room: ${message.room_code}`;
@@ -317,6 +328,9 @@
             };
 
             ws.onclose = () => {
+                creatingRoom = false;
+                joiningRoom = false;
+
                 connected = false;
                 socket = null;
                 stopTimer();
@@ -324,6 +338,9 @@
             };
 
             ws.onerror = () => {
+                creatingRoom = false;
+                joiningRoom = false;
+
                 status = "WebSocket connection failed";
                 reject(new Error("WebSocket connection failed"));
             };
@@ -331,12 +348,17 @@
     }
 
     async function createRoom() {
+        if (roomActionLoading) return;
+
         const name = playerName.trim();
 
         if (!name) {
             status = "Enter your name first";
             return;
         }
+
+        creatingRoom = true;
+        status = "Creating room…";
 
         try {
             const ws = await connect();
@@ -349,11 +371,14 @@
                 }),
             );
         } catch {
+            creatingRoom = false;
             // Connection error is already shown.
         }
     }
 
     async function joinRoom() {
+        if (roomActionLoading) return;
+
         const code = roomCode.trim().toUpperCase();
         const name = joinName.trim();
 
@@ -367,6 +392,9 @@
             return;
         }
 
+        joiningRoom = true;
+        status = "Joining room…";
+
         try {
             const ws = await connect();
 
@@ -378,6 +406,7 @@
                 }),
             );
         } catch {
+            joiningRoom = false;
             // Connection error is already shown.
         }
     }
@@ -628,12 +657,17 @@
             {/if}
 
             <button
-                type="button"
-                class="primary-button"
-                onclick={createRoom}
-                disabled={connected && !!createdRoomCode}
+                    type="button"
+                    class="primary-button"
+                    onclick={createRoom}
+                    disabled={roomActionLoading || (connected && !!createdRoomCode)}
             >
-                Create Room
+                {#if creatingRoom}
+                    <span class="button-spinner" aria-hidden="true"></span>
+                    Creating…
+                {:else}
+                    Create Room
+                {/if}
             </button>
         </section>
 
@@ -675,12 +709,17 @@
             </label>
 
             <button
-                type="button"
-                class="primary-button"
-                onclick={joinRoom}
-                disabled={!joinName.trim() || !roomCode.trim()}
+                    type="button"
+                    class="primary-button"
+                    onclick={joinRoom}
+                    disabled={roomActionLoading || !joinName.trim() || !roomCode.trim()}
             >
-                Join Room
+                {#if joiningRoom}
+                    <span class="button-spinner" aria-hidden="true"></span>
+                    Joining…
+                {:else}
+                    Join Room
+                {/if}
             </button>
         </section>
 
@@ -778,6 +817,36 @@
         font: inherit;
         font-weight: 650;
         cursor: pointer;
+    }
+
+    .button-spinner {
+        display: inline-block;
+
+        width: 0.9rem;
+        height: 0.9rem;
+
+        margin-right: 0.45rem;
+
+        border: 2px solid rgba(255, 255, 255, 0.35);
+        border-top-color: #fff;
+
+        border-radius: 50%;
+
+        vertical-align: -0.1em;
+
+        animation: button-spin 700ms linear infinite;
+    }
+
+    @keyframes button-spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .button-spinner {
+            animation: none;
+        }
     }
 
     .primary-button:hover:not(:disabled) {
