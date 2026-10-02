@@ -3,12 +3,16 @@
         onclick: (value: number) => void;
         onclear: () => void;
         remaining?: number[];
+        notesEnabled?: boolean;
+        onnotesToggle?: () => void;
     }
 
     let {
         onclick,
         onclear,
         remaining = [9, 9, 9, 9, 9, 9, 9, 9, 9],
+        notesEnabled = false,
+        onnotesToggle,
     }: Props = $props();
 </script>
 
@@ -42,7 +46,19 @@
                 </span>
             </button>
         {/each}
+
+        <button
+                type="button"
+                class:active={notesEnabled}
+                class="notes-button"
+                onclick={onnotesToggle}
+                aria-pressed={notesEnabled}
+        >
+            <span class="notes-icon">✎</span>
+            <span>Notes</span>
+        </button>
     </div>
+
 
     <button
             class="clear"
@@ -53,6 +69,7 @@
         <span class="clear-icon" aria-hidden="true">×</span>
         <span>Clear</span>
     </button>
+
 </div>
 
 <style>
@@ -134,6 +151,49 @@
     .number-value {
         font-size: 1.15rem;
         font-weight: 750;
+        line-height: 1;
+    }
+
+    .notes-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+
+        width: 100%;
+        padding: 0.65rem 0.8rem;
+
+        border: 1px solid var(--border);
+        border-radius: 8px;
+
+        background: var(--button-bg);
+        color: var(--button-text);
+
+        font: inherit;
+        font-weight: 650;
+
+        cursor: pointer;
+
+        transition:
+                background-color 120ms ease,
+                border-color 120ms ease,
+                color 120ms ease,
+                box-shadow 120ms ease;
+    }
+
+    .notes-button:hover {
+        background: var(--button-hover);
+    }
+
+    .notes-button.active {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+        color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent);
+    }
+
+    .notes-icon {
+        font-size: 1rem;
         line-height: 1;
     }
 

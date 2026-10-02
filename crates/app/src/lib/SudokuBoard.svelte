@@ -49,6 +49,8 @@
     let lockedCells = $state(new Set<number>());
     let incorrectValues = $state(new Map<number, number>());
     let boardVersion = $state(0);
+    let notesEnabled = $state(false);
+    let notes = $state(new Map<number, Set<number>>());
     let incorrectTimers = new Map<number, number>();
     let optimisticMoves = new Map<number, number>();
     let remaining = $state<number[]>([9, 9, 9, 9, 9, 9, 9, 9, 9]);
@@ -126,6 +128,12 @@
                 return;
             }
 
+            if (event.key.toLowerCase() === "n") {
+                event.preventDefault();
+                notesEnabled = !notesEnabled;
+                return;
+            }
+
             if (/^[1-9]$/.test(event.key)) {
                 event.preventDefault();
                 enterNumber(Number(event.key));
@@ -154,6 +162,50 @@
         };
     });
 
+    function removeNoteFromPeers(row: number, col: number, value: number) {
+        const next = new Map(notes);
+
+        const boxRow = Math.floor(row / 3);
+        const boxCol = Math.floor(col / 3);
+
+        for (let index = 0; index < 81; index++) {
+            if (index === row * 9 + col) {
+                continue;
+            }
+
+            const peerRow = Math.floor(index / 9);
+            const peerCol = index % 9;
+
+            const sameRow = peerRow === row;
+            const sameCol = peerCol === col;
+
+            const sameBox =
+                Math.floor(peerRow / 3) === boxRow &&
+                Math.floor(peerCol / 3) === boxCol;
+
+            if (!sameRow && !sameCol && !sameBox) {
+                continue;
+            }
+
+            const currentNotes = next.get(index);
+
+            if (!currentNotes || !currentNotes.has(value)) {
+                continue;
+            }
+
+            const updatedNotes = new Set(currentNotes);
+            updatedNotes.delete(value);
+
+            if (updatedNotes.size === 0) {
+                next.delete(index);
+            } else {
+                next.set(index, updatedNotes);
+            }
+        }
+
+        notes = next;
+    }
+
     function startNewGame() {
         if (multiplayer) return;
 
@@ -167,6 +219,9 @@
 
         if (!newGame) return;
 
+
+        notes = new Map();
+        notesEnabled = false;
         game = newGame;
         selectedCell = null;
         solved = false;
@@ -187,6 +242,9 @@
         incorrectTimers.clear();
 
         game.reset();
+
+        notes = new Map();
+        notesEnabled = false;
 
         selectedCell = null;
         solved = false;
@@ -272,7 +330,7 @@
         selectedCell = index;
     }
 
-    function enterNumber(value: number) {
+    function toggleNote(value: number) {
         if (
             !game ||
             selectedCell === null ||
@@ -282,6 +340,54 @@
         }
 
         if (lockedCells.has(selectedCell)) {
+            return;
+        }
+
+        const row = Math.floor(selectedCell / 9);
+        const col = selectedCell % 9;
+
+        if (game.is_given(row, col)) {
+            return;
+        }
+
+        if (getDisplayedValue(selectedCell) !== 0) {
+            return;
+        }
+
+        const currentNotes =
+            notes.get(selectedCell) ?? new Set<number>();
+
+        const nextNotes = new Set(currentNotes);
+
+        if (nextNotes.has(value)) {
+            nextNotes.delete(value);
+        } else {
+            nextNotes.add(value);
+        }
+
+        const next = new Map(notes);
+
+        if (nextNotes.size === 0) {
+            next.delete(selectedCell);
+        } else {
+            next.set(selectedCell, nextNotes);
+        }
+
+        notes = next;
+    }
+
+
+    function enterNumber(value: number) {
+        if (!game || selectedCell === null || solved) {
+            return;
+        }
+
+        if (lockedCells.has(selectedCell)) {
+            return;
+        }
+
+        if (notesEnabled) {
+            toggleNote(value);
             return;
         }
 
@@ -298,28 +404,29 @@
                 incorrectValues = nextIncorrect;
                 boardVersion += 1;
 
-                // Still send the move so the server records the mistake.
                 onMove?.(row, col, value);
                 return;
             }
 
+            // Remove this value from notes in the same
+            // row, column, and 3x3 box.
+            removeNoteFromPeers(row, col, value);
+
+            // The selected cell itself can no longer have notes.
+            notes.delete(cell);
+            notes = new Map(notes);
+
             optimisticMoves.set(cell, value);
             boardVersion += 1;
-            updateRemaining();
 
             onMove?.(row, col, value);
             return;
         }
 
-        /*
-         * Wrong answers are not written into the WASM board.
-         * Keep the attempted digit in UI state temporarily so
-         * the user can see it and get red visual feedback.
-         */
         if (!game.is_correct(row, col, value)) {
             const cell = selectedCell;
 
-            // Cancel the previous removal timer for this cell.
+            // Cancel the previous timer for this cell.
             const previousTimer = incorrectTimers.get(cell);
 
             if (previousTimer !== undefined) {
@@ -353,35 +460,29 @@
 
             return;
         }
+
         const accepted = game.make_move(
             row,
             col,
             value,
         );
 
-        if (!accepted) return;
+        if (!accepted) {
+            return;
+        }
 
-        /*
-         * Lock the correctly entered cell.
-         */
+        notes.delete(selectedCell);
+        notes = new Map(notes);
+        removeNoteFromPeers(row, col, value);
+
         lockedCells.add(selectedCell);
         lockedCells = new Set(lockedCells);
-
-        /*
-         * IMPORTANT:
-         *
-         * game.make_move() mutated the WASM object, but the
-         * `game` reference itself did not change.
-         *
-         * Incrementing boardVersion forces the keyed board
-         * subtree to render again and read the new WASM value.
-         */
-        boardVersion += 1;
-        updateRemaining();
 
         if (game.is_solved()) {
             solved = true;
         }
+
+        boardVersion += 1;
     }
 
     function clearCell() {
@@ -485,12 +586,14 @@
 
                     <SudokuCell
                             value={displayedValue}
+                            notes={[...(notes.get(index) ?? new Set<number>())]}
                             given={game.is_given(row, col)}
                             selected={selectedCell === index}
                             highlighted={isHighlighted(index)}
                             sameNumber={isSameNumber(index)}
                             incorrect={
                             incorrectValue !== undefined
+
                         }
                             correct={
                             !multiplayer &&
@@ -516,6 +619,8 @@
                 onclick={enterNumber}
                 onclear={clearCell}
                 remaining={remaining}
+                notesEnabled={notesEnabled}
+                onnotesToggle={() => {notesEnabled = !notesEnabled;}}
         />
 
         {#if !multiplayer}

@@ -1,12 +1,12 @@
 <script lang="ts">
     interface Props {
         value: number;
+        notes?: number[];
         given: boolean;
         selected: boolean;
         highlighted: boolean;
         sameNumber: boolean;
         incorrect: boolean;
-        correct: boolean;
         locked: boolean;
         serverFilled: boolean;
         playerId?: number | null;
@@ -15,12 +15,12 @@
 
     let {
         value,
+        notes=[],
         given,
         selected,
         highlighted,
         sameNumber,
         incorrect,
-        correct,
         locked,
         serverFilled,
         playerId = null,
@@ -35,7 +35,6 @@
     class:highlighted
     class:same-number={sameNumber}
     class:incorrect
-    class:correct
     class:locked
     class:server-filled={serverFilled}
     class:player-one={serverFilled && playerId === 1}
@@ -43,9 +42,21 @@
     type="button"
     {onclick}
 >
+    {#if value !== 0}
     <span class="cell-value">
-        {value === 0 ? "" : value}
+        {value}
     </span>
+    {:else if notes.length > 0}
+    <span class="cell-notes">
+        {#each Array.from({ length: 9 }) as _, index}
+            <span class:note-active={notes.includes(index + 1)}>
+                {notes.includes(index + 1)
+                    ? index + 1
+                    : ""}
+            </span>
+        {/each}
+    </span>
+    {/if}
 </button>
 
 <style>
@@ -91,6 +102,70 @@
         line-height: 1;
 
         user-select: none;
+    }
+
+    .cell-notes {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(3, 1fr);
+
+        width: 100%;
+        height: 100%;
+
+        padding: 8%;
+        box-sizing: border-box;
+
+        color: var(--text-muted);
+        font-size: clamp(0.45rem, 1.8vw, 0.7rem);
+        font-weight: 600;
+        line-height: 1;
+    }
+
+    .cell-notes span {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        min-width: 0;
+        min-height: 0;
+
+        user-select: none;
+    }
+
+    .cell-notes .note-active {
+        color: var(--text);
+    }
+
+    .cell-notes {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(3, 1fr);
+
+        width: 100%;
+        height: 100%;
+
+        padding: 8%;
+        box-sizing: border-box;
+
+        color: var(--text-muted);
+        font-size: clamp(0.45rem, 1.8vw, 0.7rem);
+        font-weight: 600;
+        line-height: 1;
+    }
+
+    .cell-notes span {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        min-width: 0;
+        min-height: 0;
+
+        user-select: none;
+    }
+
+    .cell-notes .note-active {
+        color: var(--text);
     }
 
     .cell:hover {
