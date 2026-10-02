@@ -160,8 +160,6 @@
         solved = false;
         lockedCells = new Set<number>();
         incorrectValues = new Map();
-
-        boardVersion += 1;
     }
 
     function resetGame() {
