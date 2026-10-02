@@ -51,6 +51,7 @@
     let boardVersion = $state(0);
     let incorrectTimers = new Map<number, number>();
     let optimisticMoves = new Map<number, number>();
+    let remaining = $state<number[]>([9, 9, 9, 9, 9, 9, 9, 9, 9]);
 
     /*
      * Multiplayer synchronization only.
@@ -173,6 +174,7 @@
         incorrectValues = new Map();
         optimisticMoves.clear();
         boardVersion += 1;
+        updateRemaining();
     }
 
     function resetGame() {
@@ -192,8 +194,7 @@
         incorrectValues = new Map();
         optimisticMoves.clear();
         boardVersion += 1;
-
-
+        updateRemaining();
     }
 
     function getServerMove(
@@ -236,22 +237,36 @@
         return game.get_cell(row, col);
     }
 
+    function updateRemaining() {
+        if (!game) {
+            remaining = [9, 9, 9, 9, 9, 9, 9, 9, 9];
+            return;
+        }
+
+        const counts = Array(9).fill(0);
+
+        for (let index = 0; index < 81; index++) {
+            const value = getDisplayedValue(index);
+
+            if (value >= 1 && value <= 9) {
+                counts[value - 1]++;
+            }
+        }
+
+        remaining = counts.map((count) => 9 - count);
+    }
+
     function selectCell(index: number) {
         if (!game || solved) return;
 
-        const row = Math.floor(index / 9);
-        const col = index % 9;
+        // const row = Math.floor(index / 9);
+        // const col = index % 9;
 
         if (multiplayer) {
-            if (getDisplayedValue(index) !== 0) {
-                return;
-            }
-
             selectedCell = index;
             return;
         }
 
-        if (game.is_given(row, col)) return;
         if (lockedCells.has(index)) return;
 
         selectedCell = index;
@@ -290,6 +305,7 @@
 
             optimisticMoves.set(cell, value);
             boardVersion += 1;
+            updateRemaining();
 
             onMove?.(row, col, value);
             return;
@@ -361,6 +377,7 @@
          * subtree to render again and read the new WASM value.
          */
         boardVersion += 1;
+        updateRemaining();
 
         if (game.is_solved()) {
             solved = true;
@@ -396,6 +413,7 @@
          */
         game.clear_move(row, col);
         boardVersion += 1;
+        updateRemaining();
 
     }
 
@@ -453,6 +471,88 @@
         );
     }
 </script>
+
+{#if game}
+    <div class="game">
+        {#key boardVersion}
+            <div class="board">
+                {#each Array.from({ length: 81 }) as _, index}
+                    {@const row = Math.floor(index / 9)}
+                    {@const col = index % 9}
+                    {@const displayedValue = getDisplayedValue(index)}
+                    {@const serverMove = getServerMove(index)}
+                    {@const incorrectValue = incorrectValues.get(index)}
+
+                    <SudokuCell
+                            value={displayedValue}
+                            given={game.is_given(row, col)}
+                            selected={selectedCell === index}
+                            highlighted={isHighlighted(index)}
+                            sameNumber={isSameNumber(index)}
+                            incorrect={
+                            incorrectValue !== undefined
+                        }
+                            correct={
+                            !multiplayer &&
+                            lockedCells.has(index)
+                        }
+                            locked={
+                            !multiplayer &&
+                            lockedCells.has(index)
+                        }
+                            serverFilled={
+                            multiplayer &&
+                            !game.is_given(row, col) &&
+                            serverMove !== undefined
+                        }
+                            playerId={serverMove?.playerSlot}
+                            onclick={() => selectCell(index)}
+                    />
+                {/each}
+            </div>
+        {/key}
+
+        <NumberPad
+                onclick={enterNumber}
+                onclear={clearCell}
+                remaining={remaining}
+        />
+
+        {#if !multiplayer}
+            <div class="controls">
+                <select bind:value={difficulty}>
+                    <option value={0}>Easy</option>
+                    <option value={1}>Medium</option>
+                    <option value={2}>Hard</option>
+                </select>
+
+                <button
+                        type="button"
+                        onclick={resetGame}
+                >
+                    Reset
+                </button>
+
+                <button
+                        type="button"
+                        onclick={startNewGame}
+                >
+                    New Game
+                </button>
+            </div>
+        {/if}
+
+        {#if solved}
+            <p class="solved">
+                🎉 Puzzle solved!
+            </p>
+        {/if}
+    </div>
+{:else}
+    <p class="loading">
+        Loading Sudoku...
+    </p>
+{/if}
 
 <style>
     .game {
